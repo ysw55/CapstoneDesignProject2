@@ -1,0 +1,114 @@
+package com.bookcanvas.domain.book.entity;
+
+import com.bookcanvas.domain.user.entity.User;
+import jakarta.persistence.*;
+import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+/**
+ * 내 책장의 책 한 권 (= 사용자의 완독 기록)
+ *
+ * <ul>
+ *   <li>책장에 추가만 한 상태: {@code reviewText == null}, 보상 없음</li>
+ *   <li>완독 인증한 상태: 200자 이상 독후감 + {@code certifiedAt}, 포인트 지급. 이후 삭제·책 정보 변경 불가</li>
+ * </ul>
+ * 같은 책은 한 사용자당 한 번만 꽂을 수 있다 (uk_completion_user_book)
+ */
+@Entity
+@Table(name = "book_completion",
+        uniqueConstraints = @UniqueConstraint(name = "uk_completion_user_book", columnNames = {"user_id", "book_id"}),
+        indexes = @Index(name = "idx_completion_user_completed_at", columnList = "user_id, completed_at"))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@EntityListeners(AuditingEntityListener.class)
+public class BookCompletion {
+
+    /** 표지 색을 고르지 않았을 때 (딥그린) */
+    public static final String DEFAULT_COVER_COLOR = "#1B4D3E";
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "book_completion_id")
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_completion_user"))
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "book_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_completion_book"))
+    private Book book;
+
+    /** 사용자가 책을 다 읽은 날짜 */
+    @Column(name = "completed_at", nullable = false)
+    private LocalDate completedAt;
+
+    /** 책장에 보이는 표지 색 (Hex) */
+    @Column(name = "cover_color", nullable = false, length = 7)
+    private String coverColor = DEFAULT_COVER_COLOR;
+
+    /** 완독 인증용 독후감 (200자 이상). 인증 전이면 null */
+    @Column(name = "review_text", columnDefinition = "TEXT")
+    private String reviewText;
+
+    /** 완독 인증 시각. 인증 전이면 null */
+    @Column(name = "certified_at")
+    private LocalDateTime certifiedAt;
+
+    /** 이 인증으로 지급된 포인트 (보상 정책이 바뀌어도 당시 지급 내역을 남기기 위함) */
+    @Column(name = "earned_point", nullable = false)
+    private int earnedPoint = 0;
+
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @Builder
+    public BookCompletion(User user, Book book, LocalDate completedAt, String coverColor) {
+        this.user = user;
+        this.book = book;
+        this.completedAt = completedAt;
+        this.coverColor = coverColor == null ? DEFAULT_COVER_COLOR : coverColor;
+    }
+
+    // === 비즈니스 메서드 ===
+
+    public boolean isCertified() {
+        return certifiedAt != null;
+    }
+
+    /** 완독 인증 처리 — 독후감과 지급 포인트를 기록 */
+    public void certify(String reviewText, LocalDate completedAt, int earnedPoint, LocalDateTime now) {
+        if (isCertified()) {
+            throw new IllegalStateException("이미 인증된 완독 기록입니다. id=" + id);
+        }
+        this.reviewText = reviewText;
+        this.completedAt = completedAt;
+        this.earnedPoint = earnedPoint;
+        this.certifiedAt = now;
+    }
+
+    /** 인증 전 기록의 책 / 완독 날짜 변경 */
+    public void changeBook(Book book, LocalDate completedAt) {
+        if (isCertified()) {
+            throw new IllegalStateException("인증된 완독 기록은 책 정보를 바꿀 수 없습니다. id=" + id);
+        }
+        this.book = book;
+        this.completedAt = completedAt;
+    }
+
+    public void changeCoverColor(String coverColor) {
+        this.coverColor = coverColor;
+    }
+}

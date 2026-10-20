@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────
+# 비밀 값(DB 비밀번호, JWT 키)은 이 파일에 적지 않습니다. 아래 둘 중 한 곳에 두세요.
+#   1) 프로젝트 루트의 application-local.yml  (Git 제외됨, application-local.example.yml 을 복사해서 작성)
+#   2) 환경 변수 DB_PASSWORD, JWT_SECRET
+# ─────────────────────────────────────────────────────────
+spring:
+  application:
+    name: bookcanvas
+
+  config:
+    # 로컬 비밀 설정 파일 (없으면 건너뜀). 실행 위치(프로젝트 루트) 기준 경로
+    import: optional:file:./application-local.yml
+
+  # ── MySQL 8 ────────────────────────────────────────────
+  # createDatabaseIfNotExist=true : 실행 시 bookcanvas DB 가 없으면 자동 생성
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/bookcanvas?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&createDatabaseIfNotExist=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # 개발 단계: 엔티티 변경 시 테이블 자동 생성·컬럼 추가. 운영 배포 전 validate 로 바꿀 것
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect   # MySQL 8 용 (Hibernate 6 은 버전별 방언이 MySQLDialect 하나로 통합됨)
+        format_sql: true
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: Asia/Seoul
+
+# ── JWT ────────────────────────────────────────────────
+jwt:
+  # Base64 로 인코딩된 256bit(32byte) 이상의 비밀 키 — application-local.yml 또는 환경 변수로 지정
+  #   생성 예: openssl rand -base64 32
+  #           PowerShell: [Convert]::ToBase64String((1..32 | % { Get-Random -Max 256 }))
+  secret: ${JWT_SECRET}
+  # Access Token 유효 시간(초). 캡스톤 시연 중 만료되지 않도록 24시간
+  access-token-validity-seconds: ${JWT_VALIDITY_SECONDS:86400}
+
+app:
+  # 프론트 개발 서버(Vite)는 프록시를 쓰므로 CORS 가 필요 없지만,
+  # 배포/웹뷰 환경에서 다른 도메인으로 호출할 때를 위해 허용 목록을 둡니다. (쉼표 구분)
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+
+  # ── 캡스톤 시연용 ──
+  demo:
+    # DB 가 비어 있으면 샘플 사용자·피드·책장 데이터를 넣어 줍니다 (이미 있으면 건너뜀)
+    seed-enabled: ${DEMO_SEED_ENABLED:true}
+    # 카카오/구글 '시연용 간편 로그인' (실제 OAuth 아님). 실서비스 배포 시 반드시 false
+    login-enabled: ${DEMO_LOGIN_ENABLED:true}
+
+logging:
+  level:
+    com.bookcanvas: debug

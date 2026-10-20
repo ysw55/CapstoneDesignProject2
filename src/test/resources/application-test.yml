@@ -1,0 +1,26 @@
+# 테스트 전용: MySQL 대신 H2 인메모리 DB (MySQL 호환 모드)
+spring:
+  datasource:
+    url: jdbc:h2:mem:bookcanvas;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: false
+
+# 테스트 전용 키 (실제 서비스 키 아님) — application-local.yml / 환경 변수 없이도 테스트가 돌도록
+jwt:
+  secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQta2V5LWZvci1ib29rY2FudmFzLXRlc3Rz
+
+app:
+  demo:
+    seed-enabled: false   # 테스트는 깨끗한 DB 에서 시작
+    login-enabled: true
+
+logging:
+  level:
+    com.bookcanvas: info

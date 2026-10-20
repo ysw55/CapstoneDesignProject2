@@ -1,0 +1,48 @@
+# ───────── 비밀 정보 (절대 커밋 금지) ─────────
+application-local.yml
+.env
+.env.*
+!.env.example
+
+# ───────── 빌드 결과물 ─────────
+target/
+dist/
+build/
+out/
+
+# ───────── 의존성 ─────────
+node_modules/
+
+# ───────── IDE / 에디터 ─────────
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+*.swp
+
+# ───────── OS ─────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ───────── 로그 / 임시 파일 ─────────
+*.log
+logs/
+*.tmp
+
+# ───────── 테스트 · E2E 임시 산출물 ─────────
+e2e/
+playwright-report/
+test-results/
+*.e2e.mjs
+coverage/
+
+# ───────── 도구가 자동 생성한 파일 ─────────
+# VS Code Java 업그레이드 도구(App Modernization) 작업 기록
+.github/modernize/
+
+# ───────── 리뉴얼 전 구 UI 백업 (현재 앱에서 사용하지 않음) ─────────
+frontend/_legacy/

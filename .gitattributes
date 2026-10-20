@@ -1,0 +1,9 @@
+# 줄바꿈을 LF 로 통일 (Windows / macOS 팀원 간 '전체 줄 변경' diff 방지)
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
+*.jar binary
