@@ -28,17 +28,18 @@
 
 ```
 capstone-design/
-├─ pom.xml                         # 백엔드 Maven 설정
-├─ application-local.example.yml   # 로컬 비밀 설정 예시 (복사해서 application-local.yml 로 사용)
-├─ src/main/java/com/bookcanvas/
-│  ├─ domain/
-│  │  ├─ user/     # 회원가입·로그인·JWT·비밀번호 변경·시연용 간편 로그인
-│  │  ├─ book/     # 내 책장, 완독 인증
-│  │  ├─ quote/    # 커뮤니티 글, 좋아요, 댓글
-│  │  └─ tag/      # 상황 태그
-│  └─ global/      # 보안 설정, 공통 예외 처리, 시연용 샘플 데이터
-├─ src/main/resources/application.yml
-├─ src/test/                       # 단위 · 통합 테스트 (H2)
+├─ backend/                        # Spring Boot
+│  ├─ pom.xml                         # 백엔드 Maven 설정
+│  ├─ application-local.example.yml   # 로컬 비밀 설정 예시 (복사해서 application-local.yml 로 사용)
+│  ├─ src/main/java/com/bookcanvas/
+│  │  ├─ domain/
+│  │  │  ├─ user/     # 회원가입·로그인·JWT·비밀번호 변경·시연용 간편 로그인
+│  │  │  ├─ book/     # 내 책장, 완독 인증
+│  │  │  ├─ quote/    # 커뮤니티 글, 좋아요, 댓글
+│  │  │  └─ tag/      # 상황 태그
+│  │  └─ global/      # 보안 설정, 공통 예외 처리, 시연용 샘플 데이터
+│  ├─ src/main/resources/application.yml
+│  └─ src/test/                       # 단위 · 통합 테스트 (H2)
 └─ frontend/                       # React + Vite
    └─ src/
       ├─ api/         # 백엔드 API 호출 (JWT 자동 첨부)
@@ -72,9 +73,10 @@ CREATE DATABASE IF NOT EXISTS bookcanvas
 
 ### 3. 비밀 설정 파일 만들기 ⚠️ 필수
 
-DB 비밀번호와 JWT 키는 GitHub 에 올리지 않습니다. 프로젝트 루트에서 예시 파일을 복사한 뒤 **내 값으로 수정**하세요.
+DB 비밀번호와 JWT 키는 GitHub 에 올리지 않습니다. `backend/` 폴더에서 예시 파일을 복사한 뒤 **내 값으로 수정**하세요.
 
 ```bash
+cd backend
 # Windows
 copy application-local.example.yml application-local.yml
 # macOS / Linux
@@ -107,7 +109,8 @@ openssl rand -base64 32
 ### 백엔드 (http://localhost:8080)
 
 ```bash
-# 프로젝트 루트에서 실행 (application-local.yml 을 찾는 기준 위치)
+# backend 폴더에서 실행 (application-local.yml 을 찾는 기준 위치)
+cd backend
 mvn spring-boot:run
 ```
 
@@ -128,6 +131,7 @@ npm run dev
 ### 테스트
 
 ```bash
+cd backend
 mvn test        # 백엔드 단위 · 통합 테스트 (H2 사용, MySQL 불필요)
 ```
 
@@ -194,7 +198,7 @@ DROP DATABASE bookcanvas;
 
 | 증상 | 해결 |
 |---|---|
-| `Could not resolve placeholder 'DB_PASSWORD'` 또는 `'JWT_SECRET'` | 루트에 `application-local.yml` 이 없거나, 프로젝트 루트가 아닌 곳에서 실행함 → [비밀 설정 파일 만들기](#3-비밀-설정-파일-만들기-️-필수) |
+| `Could not resolve placeholder 'DB_PASSWORD'` 또는 `'JWT_SECRET'` | `backend/` 에 `application-local.yml` 이 없거나, `backend/` 가 아닌 곳에서 실행함 → [비밀 설정 파일 만들기](#3-비밀-설정-파일-만들기-️-필수) |
 | `Access denied for user 'root'@'localhost'` | `application-local.yml` 의 `DB_PASSWORD` 확인 |
 | `Unknown column 'RESERVED' in 'WHERE'` | 3306 포트에 MySQL 이 아닌 **MariaDB** 가 떠 있음 → MariaDB 서비스를 끄고 MySQL 8.0 을 3306 에서 실행 |
 | 프론트에서 "서버에 연결할 수 없어요" | 백엔드(8080)가 실행 중인지 확인 |

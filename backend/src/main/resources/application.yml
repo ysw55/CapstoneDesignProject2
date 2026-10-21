@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────
 # 비밀 값(DB 비밀번호, JWT 키)은 이 파일에 적지 않습니다. 아래 둘 중 한 곳에 두세요.
-#   1) 프로젝트 루트의 application-local.yml  (Git 제외됨, application-local.example.yml 을 복사해서 작성)
+#   1) backend/ 폴더의 application-local.yml  (Git 제외됨, application-local.example.yml 을 복사해서 작성)
 #   2) 환경 변수 DB_PASSWORD, JWT_SECRET
 # ─────────────────────────────────────────────────────────
 spring:
