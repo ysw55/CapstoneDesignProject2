@@ -34,6 +34,23 @@ const base = {
     fast: '150ms cubic-bezier(0.2, 0, 0, 1)',
     normal: '250ms cubic-bezier(0.2, 0, 0, 1)',
   },
+  // 내 책장 가구: 호두나무 프레임 · 밝은 오크 선반 · 어두운 원목 뒷판. 라이트/다크 모두 같은 색을 쓴다.
+  furniture: {
+    frame: '#8A5A3B', // 기둥·받침 (호두나무)
+    line: '#3B2315', // 부위를 나누는 윤곽선
+    groove: '#65402A', // 기둥에 판 세로 홈
+    bevel: '#C08F63', // 기둥 안쪽 모서리 하이라이트
+    carving: 'rgba(244, 222, 190, 0.7)', // 조각 무늬 (밝은 선)
+    carvingShadow: 'rgba(45, 24, 12, 0.6)', // 조각 무늬 (파인 그림자)
+    top: '#A8794F', // 맨 위 상판
+    plank: '#B88B5E', // 선반 (오크)
+    plankEdge: '#D4AB7C', // 선반 윗면 반사광
+    wood: '#6A4430', // 뒷판
+    woodDark: '#4B2F21',
+    trim: '#C9A24E',
+    label: '#F1E6D6',
+    labelMuted: '#C9B8A0',
+  },
 };
 
 export const lightTheme = {

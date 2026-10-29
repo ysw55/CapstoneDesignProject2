@@ -60,7 +60,18 @@ export const mapShelfBook = (b) => ({
   completedAt: b.completedAt,
   coverColor: b.coverColor,
   certified: b.certified,
+  shelfOrder: b.shelfOrder ?? null, // 직접 정한 위치 (정한 적 없으면 null)
 });
+
+/**
+ * 책장 순서 — 서버(BookCompletionRepository.findShelfByUserId)와 같은 규칙
+ * 직접 정한 위치가 없는 책(최근 완독 순)이 앞, 그다음 직접 정한 위치 순
+ */
+export const compareShelf = (a, b) => {
+  if ((a.shelfOrder === null) !== (b.shelfOrder === null)) return a.shelfOrder === null ? -1 : 1;
+  if (a.shelfOrder !== b.shelfOrder) return a.shelfOrder - b.shelfOrder;
+  return b.completedAt.localeCompare(a.completedAt) || b.id - a.id;
+};
 
 /** 내가 쓴 글인지 (서버가 JWT 기준으로 계산해 준 값) */
 export const isMyPost = (post) => Boolean(post.mine);
@@ -141,6 +152,11 @@ function reducer(state, action) {
         highlightBookId: action.book.id,
         highlightBookIsNew: action.isNew,
       };
+    }
+    case 'BOOKS_REORDERED': {
+      // ids 순서대로 위치를 다시 매긴다 (낙관적 반영 — 서버 저장 실패 시 책장을 다시 불러옴)
+      const rank = new Map(action.ids.map((id, i) => [id, i]));
+      return { ...state, books: state.books.map((b) => ({ ...b, shelfOrder: rank.get(b.id) ?? b.shelfOrder })) };
     }
     case 'BOOK_REMOVED':
       return { ...state, books: state.books.filter((b) => b.id !== action.id) };
@@ -254,6 +270,16 @@ export function AppDataProvider({ children }) {
       updateBook: async (id, book) => {
         const res = await booksApi.updateShelfBook(id, book);
         dispatch({ type: 'BOOK_UPSERT', book: mapShelfBook(res), isNew: false });
+      },
+      /** 책장 순서 변경: 화면에 먼저 반영하고 서버에 저장, 실패하면 서버 순서로 되돌린다 */
+      reorderBooks: async (ids) => {
+        dispatch({ type: 'BOOKS_REORDERED', ids });
+        try {
+          await booksApi.reorderShelf(ids);
+        } catch (err) {
+          await loadShelf();
+          throw err;
+        }
       },
       deleteBook: async (id) => {
         await booksApi.deleteShelfBook(id);

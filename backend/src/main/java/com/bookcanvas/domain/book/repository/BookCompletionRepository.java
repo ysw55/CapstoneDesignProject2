@@ -18,12 +18,16 @@ public interface BookCompletionRepository extends JpaRepository<BookCompletion, 
     /** 다른 사용자의 책장 항목에 접근하지 못하도록 항상 userId 와 함께 조회 */
     Optional<BookCompletion> findByIdAndUserId(Long id, Long userId);
 
-    /** 내 책장 전체 — 최근 완독 순. 책 정보는 fetch join 으로 한 번에 */
+    /**
+     * 내 책장 전체. 책 정보는 fetch join 으로 한 번에.
+     * 순서: 직접 정한 위치가 없는 책(최근 완독 순) → 직접 정한 위치 순
+     */
     @Query("""
             SELECT c FROM BookCompletion c
             JOIN FETCH c.book
             WHERE c.user.id = :userId
-            ORDER BY c.completedAt DESC, c.id DESC
+            ORDER BY CASE WHEN c.shelfOrder IS NULL THEN 0 ELSE 1 END,
+                     c.shelfOrder ASC, c.completedAt DESC, c.id DESC
             """)
     List<BookCompletion> findShelfByUserId(@Param("userId") Long userId);
 

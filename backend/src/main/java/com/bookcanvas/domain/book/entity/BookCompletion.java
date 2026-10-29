@@ -62,6 +62,13 @@ public class BookCompletion {
     @Column(name = "certified_at")
     private LocalDateTime certifiedAt;
 
+    /**
+     * 책장에서 사용자가 직접 정한 위치 (0부터, 작을수록 앞). 정한 적 없으면 null.
+     * null 인 책(새로 꽂은 책 포함)은 맨 앞에 최근 완독 순으로 놓인다.
+     */
+    @Column(name = "shelf_order")
+    private Integer shelfOrder;
+
     /** 이 인증으로 지급된 포인트 (보상 정책이 바뀌어도 당시 지급 내역을 남기기 위함) */
     @Column(name = "earned_point", nullable = false)
     private int earnedPoint = 0;
@@ -106,6 +113,10 @@ public class BookCompletion {
         }
         this.book = book;
         this.completedAt = completedAt;
+    }
+
+    public void moveTo(int shelfOrder) {
+        this.shelfOrder = shelfOrder;
     }
 
     public void changeCoverColor(String coverColor) {

@@ -17,7 +17,8 @@ import java.time.LocalDateTime;
  *   "coverColor": "#1B4D3E",
  *   "certified": true,             // 완독 인증(✓ 배지) 여부
  *   "certifiedAt": "2026-10-12T21:03:00",
- *   "earnedPoint": 100
+ *   "earnedPoint": 100,
+ *   "shelfOrder": 2                // 직접 정한 위치. 정한 적 없으면 null
  * }
  * }</pre>
  */
@@ -28,7 +29,8 @@ public record ShelfBookResponseDto(
         String coverColor,
         boolean certified,
         LocalDateTime certifiedAt,
-        int earnedPoint
+        int earnedPoint,
+        Integer shelfOrder
 ) {
     public static ShelfBookResponseDto from(BookCompletion c) {
         Book b = c.getBook();
@@ -39,7 +41,8 @@ public record ShelfBookResponseDto(
                 c.getCoverColor(),
                 c.isCertified(),
                 c.getCertifiedAt(),
-                c.getEarnedPoint()
+                c.getEarnedPoint(),
+                c.getShelfOrder()
         );
     }
 }

@@ -44,7 +44,7 @@ class ShelfQuoteAccountIntegrationTest {
     }
 
     private JsonNode json(ResultActions result) throws Exception {
-        return objectMapper.readTree(result.andReturn().getResponse().getContentAsString());
+        return objectMapper.readTree(result.andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private String signup(String email, String username) throws Exception {
@@ -58,6 +58,48 @@ class ShelfQuoteAccountIntegrationTest {
     }
 
     // ── 내 책장 ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("책장 순서: 저장하면 그 순서로 조회, 새 책은 맨 앞, 잘못된 목록은 400")
+    void shelfReorder() throws Exception {
+        String token = signup("order@bookcanvas.com", "순서주인");
+        long a = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책A", "2026-10-01"), token)).get("completionId").asLong();
+        long b = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책B", "2026-10-02"), token)).get("completionId").asLong();
+        long c = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책C", "2026-10-03"), token)).get("completionId").asLong();
+
+        // 정한 적 없으면 최근 완독 순: C, B, A
+        JsonNode shelf = json(call(HttpMethod.GET, "/api/books/completions", null, token));
+        assertThat(shelf.findValuesAsText("title")).containsExactly("책C", "책B", "책A");
+
+        // A, C, B 순으로 저장
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of(a, c, b)), token)
+                .andExpect(status().isNoContent());
+        shelf = json(call(HttpMethod.GET, "/api/books/completions", null, token));
+        assertThat(shelf.findValuesAsText("title")).containsExactly("책A", "책C", "책B");
+        assertThat(shelf.get(0).get("shelfOrder").asInt()).isEqualTo(0);
+
+        // 새로 꽂은 책은 정한 순서와 상관없이 맨 앞
+        call(HttpMethod.POST, "/api/books/completions", shelfBook("책D", "2026-09-01"), token).andExpect(status().isCreated());
+        shelf = json(call(HttpMethod.GET, "/api/books/completions", null, token));
+        assertThat(shelf.findValuesAsText("title")).containsExactly("책D", "책A", "책C", "책B");
+
+        // 일부만 보내거나 중복·없는 id → 400
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of(a, b)), token)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SHELF_ORDER"));
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of(a, a, b, c)), token)
+                .andExpect(status().isBadRequest());
+
+        // 남의 책장 id 가 섞이면 400
+        String other = signup("order2@bookcanvas.com", "다른사람");
+        long x = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책X", "2026-10-01"), other)).get("completionId").asLong();
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of(a, b, c, x)), token)
+                .andExpect(status().isBadRequest());
+
+        // 로그인 없이는 401
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of()), null)
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     @DisplayName("책장: 추가 → 조회 → 수정 → 완독 인증(같은 항목이 ✓) → 인증 후 삭제·정보 변경 불가")

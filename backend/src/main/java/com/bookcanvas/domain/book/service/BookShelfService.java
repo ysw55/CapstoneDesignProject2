@@ -15,8 +15,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 내 책장 조회 / 추가 / 수정 / 삭제 (독후감 없는 일반 등록)
@@ -34,7 +38,7 @@ public class BookShelfService {
     private final UserRepository userRepository;
     private final BookFinder bookFinder;
 
-    /** 로그인 사용자의 책장 전체 (최근 완독 순) */
+    /** 로그인 사용자의 책장 전체 (직접 정한 순서, 없으면 최근 완독 순) */
     public List<ShelfBookResponseDto> getMyShelf(Long userId) {
         return bookCompletionRepository.findShelfByUserId(userId).stream()
                 .map(ShelfBookResponseDto::from)
@@ -90,6 +94,25 @@ public class BookShelfService {
         }
         saveAndFlush(entry);
         return ShelfBookResponseDto.from(entry);
+    }
+
+    /**
+     * 책장 순서 저장. 내 책장의 모든 책을 원하는 순서대로 한 번씩 담아 보내야 한다.
+     * (일부만 오거나 남의 책·중복이 섞이면 거절 — 화면이 오래된 상태일 수 있음)
+     */
+    @Transactional
+    public void reorder(Long userId, List<Long> completionIds) {
+        List<BookCompletion> mine = bookCompletionRepository.findShelfByUserId(userId);
+        Map<Long, BookCompletion> byId = mine.stream()
+                .collect(Collectors.toMap(BookCompletion::getId, Function.identity()));
+
+        if (completionIds.size() != byId.size() || !byId.keySet().equals(new HashSet<>(completionIds))) {
+            throw new BusinessException(ErrorCode.INVALID_SHELF_ORDER);
+        }
+        for (int i = 0; i < completionIds.size(); i++) {
+            byId.get(completionIds.get(i)).moveTo(i);
+        }
+        log.info("[Shelf] 순서 변경 - userId={}, count={}", userId, completionIds.size());
     }
 
     @Transactional

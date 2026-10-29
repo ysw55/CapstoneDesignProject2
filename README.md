@@ -184,6 +184,7 @@ DROP DATABASE bookcanvas;
 | POST | `/api/auth/password` | 비밀번호 변경 | JWT |
 | GET | `/api/books/completions` | 내 책장 | JWT |
 | POST / PUT / DELETE | `/api/books/completions[/{id}]` | 책장 추가 · 수정 · 삭제 | JWT |
+| PUT | `/api/books/completions/order` | 책장 순서 저장 `{ "completionIds": [내 책장 전체 id를 원하는 순서로] }` | JWT |
 | POST | `/api/books/completion` | 완독 인증 (독후감 200자 이상) | JWT |
 | GET | `/api/quotes` | 커뮤니티 피드 | 선택 |
 | POST / PUT / DELETE | `/api/quotes[/{id}]` | 글쓰기 · 수정 · 삭제 | JWT |
