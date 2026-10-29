@@ -6,7 +6,7 @@ export const MAX_REVIEW_LENGTH = 5000;
 
 /**
  * 내 책장 (JWT 필수)
- * 응답 항목: { completionId, book: { bookId, title, author }, completedAt, coverColor, certified, certifiedAt, earnedPoint }
+ * 응답 항목: { completionId, book: { bookId, title, author }, completedAt, coverColor, certified, certifiedAt, earnedPoint, shelfOrder }
  */
 export const fetchShelf = () => apiFetch('/api/books/completions');
 
@@ -15,6 +15,10 @@ export const addShelfBook = (payload) => apiFetch('/api/books/completions', { me
 
 export const updateShelfBook = (completionId, payload) =>
   apiFetch(`/api/books/completions/${completionId}`, { method: 'PUT', body: payload });
+
+/** 책장 순서 저장 — 내 책장의 모든 completionId 를 원하는 순서(앞 → 뒤)로 */
+export const reorderShelf = (completionIds) =>
+  apiFetch('/api/books/completions/order', { method: 'PUT', body: { completionIds } });
 
 export const deleteShelfBook = (completionId) =>
   apiFetch(`/api/books/completions/${completionId}`, { method: 'DELETE' });

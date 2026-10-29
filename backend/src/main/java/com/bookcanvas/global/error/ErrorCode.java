@@ -39,6 +39,7 @@ public enum ErrorCode {
     ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 완독 인증한 책이에요."),
     ALREADY_ON_SHELF(HttpStatus.CONFLICT, "이미 책장에 있는 책이에요."),
     SHELF_BOOK_NOT_FOUND(HttpStatus.NOT_FOUND, "책장에서 책을 찾을 수 없어요."),
+    INVALID_SHELF_ORDER(HttpStatus.BAD_REQUEST, "책장 순서 정보가 올바르지 않아요. 새로고침 후 다시 시도해 주세요."),
     CERTIFIED_BOOK_LOCKED(HttpStatus.CONFLICT, "완독 인증한 책은 표지 색만 바꿀 수 있고, 삭제할 수 없어요."),
 
     // ── 커뮤니티 ──

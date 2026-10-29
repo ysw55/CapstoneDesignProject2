@@ -4,6 +4,7 @@ import com.bookcanvas.domain.book.dto.BookCompletionRequestDto;
 import com.bookcanvas.domain.book.dto.BookCompletionResponseDto;
 import com.bookcanvas.domain.book.dto.ShelfBookRequestDto;
 import com.bookcanvas.domain.book.dto.ShelfBookResponseDto;
+import com.bookcanvas.domain.book.dto.ShelfOrderRequestDto;
 import com.bookcanvas.domain.book.service.BookCompletionService;
 import com.bookcanvas.domain.book.service.BookShelfService;
 import com.bookcanvas.global.security.AuthUser;
@@ -23,6 +24,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code GET    /completions}       내 책장(완독 기록) 전체 — {@code certified} 로 ✓ 배지 표시</li>
  *   <li>{@code POST   /completions}       책장에 추가 (독후감 없이, 보상 없음)</li>
+ *   <li>{@code PUT    /completions/order} 책장 순서 저장 (모든 책의 id 를 원하는 순서대로)</li>
  *   <li>{@code PUT    /completions/{id}}  책 정보 수정 (인증한 책은 표지 색만)</li>
  *   <li>{@code DELETE /completions/{id}}  책장에서 삭제 (인증한 책은 불가)</li>
  *   <li>{@code POST   /completion}        완독 인증 (독후감 200자 이상, 보상 지급)</li>
@@ -47,6 +49,15 @@ public class BookController {
             @Valid @RequestBody ShelfBookRequestDto request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(bookShelfService.addBook(authUser.userId(), request));
+    }
+
+    @PutMapping("/completions/order")
+    public ResponseEntity<Void> reorderShelf(
+            @AuthenticationPrincipal AuthUser authUser,
+            @Valid @RequestBody ShelfOrderRequestDto request
+    ) {
+        bookShelfService.reorder(authUser.userId(), request.completionIds());
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/completions/{completionId}")
