@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import { BadgeCheck, Check, ChevronRight, Lock } from 'lucide-react';
 import FormScreen, { Field, Input, Label } from '../components/form/FormScreen';
 import LoadingScreen from '../components/common/LoadingScreen';
 import BookCover from '../components/book/BookCover';
+import BookSearch from '../components/form/BookSearch';
 import { pickCoverColor, useAppData } from '../context/AppDataContext';
 import { COVER_PALETTE } from '../mockData';
 import { isLightColor, todayISO } from '../utils/format';
@@ -25,8 +26,11 @@ export default function BookFormPage() {
 
 function BookForm({ editing }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { books, addBook, updateBook } = useAppData();
   const isEdit = Boolean(editing);
+  // 책장 화면에서 + 로 들어오면 그때 보던 책장(?shelfId=)에 꽂는다. 없으면 서버가 첫 번째 책장에 꽂는다
+  const shelfId = Number(searchParams.get('shelfId')) || undefined;
   // 완독 인증한 책은 보상 중복을 막기 위해 서버가 표지 색 외 변경을 막는다 → 화면에서도 잠금
   const locked = Boolean(editing?.certified);
   const [error, setError] = useState(null);
@@ -37,10 +41,19 @@ function BookForm({ editing }) {
       : { title: '', author: '', completedAt: todayISO(), coverColor: '' }
   );
   const [saving, setSaving] = useState(false);
+  // 도서 검색으로 고른 책의 ISBN · 출판사 · 표지 (제목/저자를 직접 고치면 다른 책이 되므로 비운다)
+  const [picked, setPicked] = useState(null);
 
   const update = (field) => (e) => {
     setError(null);
+    if (field === 'title' || field === 'author') setPicked(null);
     setForm((f) => ({ ...f, [field]: e.target.value }));
+  };
+
+  const handlePick = (book) => {
+    setError(null);
+    setForm((f) => ({ ...f, title: book.title, author: book.author ?? '' }));
+    setPicked({ isbn: book.isbn, publisher: book.publisher, coverImageUrl: book.coverImageUrl });
   };
   const today = todayISO();
   const canSubmit = form.title.trim() && form.author.trim() && form.completedAt && form.completedAt <= today;
@@ -53,10 +66,11 @@ function BookForm({ editing }) {
       title: form.title.trim(),
       author: form.author.trim(),
       coverColor: form.coverColor || pickCoverColor(books), // 고르지 않았으면 자동 선택
+      ...(!isEdit && picked), // 검색으로 고른 책이면 ISBN · 출판사 · 표지도 함께 저장
     };
     try {
       if (isEdit) await updateBook(editing.id, book);
-      else await addBook(book);
+      else await addBook({ ...book, shelfId });
       navigate('/bookshelf', { replace: true, state: { toast: isEdit ? '책 정보를 수정했어요' : '책장에 꽂아 뒀어요' } });
     } catch (err) {
       setError(err.message);
@@ -81,6 +95,7 @@ function BookForm({ editing }) {
             title={form.title || '책 제목'}
             author={form.author || '저자'}
             color={form.coverColor || pickCoverColor(books)}
+            imageUrl={picked?.coverImageUrl ?? editing?.coverImageUrl}
           />
         </PreviewCover>
         <PrivateNote>
@@ -99,6 +114,13 @@ function BookForm({ editing }) {
           </CertifyLink>
         )}
       </Preview>
+
+      {!isEdit && (
+        <Field>
+          <Label as="span">책 검색</Label>
+          <BookSearch onPick={handlePick} />
+        </Field>
+      )}
 
       <Field>
         <Label htmlFor="title">책 제목</Label>

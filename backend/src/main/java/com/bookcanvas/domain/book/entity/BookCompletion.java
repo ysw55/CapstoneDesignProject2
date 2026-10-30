@@ -3,6 +3,7 @@ package com.bookcanvas.domain.book.entity;
 import com.bookcanvas.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -46,6 +47,14 @@ public class BookCompletion {
             foreignKey = @ForeignKey(name = "fk_completion_book"))
     private Book book;
 
+    /**
+     * 꽂혀 있는 책장. 책장 기능 이전에 만든 책이나 완독 인증으로 새로 생긴 책은 null 일 수 있고,
+     * 책장 목록을 불러올 때 첫 번째 책장으로 채워진다 ({@code BookshelfService#ensureDefaultShelf}).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shelf_id", foreignKey = @ForeignKey(name = "fk_completion_bookshelf"))
+    private Bookshelf shelf;
+
     /** 사용자가 책을 다 읽은 날짜 */
     @Column(name = "completed_at", nullable = false)
     private LocalDate completedAt;
@@ -69,6 +78,14 @@ public class BookCompletion {
     @Column(name = "shelf_order")
     private Integer shelfOrder;
 
+    /**
+     * 보관함에 넣은 책인지. 보관한 책은 책장에서 빠지지만 기록(독후감·인증·포인트)은 그대로 남는다.
+     * 인증한 책은 삭제할 수 없으므로, 책장을 정리하고 싶을 때 여기로 옮긴다.
+     */
+    @ColumnDefault("false")
+    @Column(name = "archived", nullable = false)
+    private boolean archived = false;
+
     /** 이 인증으로 지급된 포인트 (보상 정책이 바뀌어도 당시 지급 내역을 남기기 위함) */
     @Column(name = "earned_point", nullable = false)
     private int earnedPoint = 0;
@@ -82,8 +99,9 @@ public class BookCompletion {
     private LocalDateTime updatedAt;
 
     @Builder
-    public BookCompletion(User user, Book book, LocalDate completedAt, String coverColor) {
+    public BookCompletion(User user, Book book, Bookshelf shelf, LocalDate completedAt, String coverColor) {
         this.user = user;
+        this.shelf = shelf;
         this.book = book;
         this.completedAt = completedAt;
         this.coverColor = coverColor == null ? DEFAULT_COVER_COLOR : coverColor;
@@ -113,6 +131,28 @@ public class BookCompletion {
         }
         this.book = book;
         this.completedAt = completedAt;
+    }
+
+    /** 책장이 없던 책을 채워 넣을 때 — 순서는 그대로 둔다 */
+    public void assignShelf(Bookshelf shelf) {
+        this.shelf = shelf;
+    }
+
+    /** 다른 책장으로 옮기면 그 책장의 맨 앞(최근 완독 순)에 놓인다 */
+    public void moveToShelf(Bookshelf shelf) {
+        this.shelf = shelf;
+        this.shelfOrder = null;
+    }
+
+    public void archive() {
+        this.archived = true;
+        this.shelfOrder = null;
+    }
+
+    /** 보관함에서 꺼내면 새로 꽂은 책처럼 맨 앞(최근 완독 순)으로 돌아간다 */
+    public void unarchive() {
+        this.archived = false;
+        this.shelfOrder = null;
     }
 
     public void moveTo(int shelfOrder) {

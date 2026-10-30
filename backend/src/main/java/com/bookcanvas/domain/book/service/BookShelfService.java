@@ -4,6 +4,7 @@ import com.bookcanvas.domain.book.dto.ShelfBookRequestDto;
 import com.bookcanvas.domain.book.dto.ShelfBookResponseDto;
 import com.bookcanvas.domain.book.entity.Book;
 import com.bookcanvas.domain.book.entity.BookCompletion;
+import com.bookcanvas.domain.book.entity.Bookshelf;
 import com.bookcanvas.domain.book.repository.BookCompletionRepository;
 import com.bookcanvas.domain.user.entity.User;
 import com.bookcanvas.domain.user.repository.UserRepository;
@@ -37,9 +38,12 @@ public class BookShelfService {
     private final BookCompletionRepository bookCompletionRepository;
     private final UserRepository userRepository;
     private final BookFinder bookFinder;
+    private final BookshelvesService bookshelvesService;
 
-    /** 로그인 사용자의 책장 전체 (직접 정한 순서, 없으면 최근 완독 순) */
+    /** 로그인 사용자의 책 전체 — 모든 책장과 보관함 (직접 정한 순서, 없으면 최근 완독 순) */
+    @Transactional // 책장이 정해지지 않은 책을 첫 번째 책장에 채워 넣기 때문에 쓰기 트랜잭션
     public List<ShelfBookResponseDto> getMyShelf(Long userId) {
+        bookshelvesService.ensureDefaultShelf(userId);
         return bookCompletionRepository.findShelfByUserId(userId).stream()
                 .map(ShelfBookResponseDto::from)
                 .toList();
@@ -49,15 +53,21 @@ public class BookShelfService {
     public ShelfBookResponseDto addBook(Long userId, ShelfBookRequestDto request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Book book = bookFinder.findOrCreate(request.title(), request.author());
+        String coverUrl = BookSearchService.isTrustedCoverUrl(request.coverImageUrl()) ? request.coverImageUrl().trim() : null;
+        Book book = bookFinder.findOrCreate(request.title(), request.author(), request.isbn(), request.publisher(), coverUrl);
+        Bookshelf shelf = request.shelfId() == null
+                ? bookshelvesService.ensureDefaultShelf(userId)
+                : bookshelvesService.findOwned(userId, request.shelfId());
 
-        if (bookCompletionRepository.findByUserIdAndBookId(userId, book.getId()).isPresent()) {
-            throw new BusinessException(ErrorCode.ALREADY_ON_SHELF);
+        var existing = bookCompletionRepository.findByUserIdAndBookId(userId, book.getId());
+        if (existing.isPresent()) {
+            throw new BusinessException(existing.get().isArchived() ? ErrorCode.ALREADY_ARCHIVED : ErrorCode.ALREADY_ON_SHELF);
         }
 
         BookCompletion entry = BookCompletion.builder()
                 .user(user)
                 .book(book)
+                .shelf(shelf)
                 .completedAt(request.completedAt())
                 .coverColor(request.coverColor())
                 .build();
@@ -97,12 +107,17 @@ public class BookShelfService {
     }
 
     /**
-     * 책장 순서 저장. 내 책장의 모든 책을 원하는 순서대로 한 번씩 담아 보내야 한다.
+     * 책장 순서 저장. 그 책장에 꽂힌(보관하지 않은) 모든 책을 원하는 순서대로 한 번씩 담아 보내야 한다.
      * (일부만 오거나 남의 책·중복이 섞이면 거절 — 화면이 오래된 상태일 수 있음)
      */
     @Transactional
-    public void reorder(Long userId, List<Long> completionIds) {
-        List<BookCompletion> mine = bookCompletionRepository.findShelfByUserId(userId);
+    public void reorder(Long userId, Long shelfId, List<Long> completionIds) {
+        bookshelvesService.ensureDefaultShelf(userId);
+        // 순서는 그 책장에 꽂힌 책끼리만 정한다 (보관함의 책은 제외, shelfId 가 없으면 모든 책장)
+        List<BookCompletion> mine = bookCompletionRepository.findShelfByUserId(userId).stream()
+                .filter(c -> !c.isArchived())
+                .filter(c -> shelfId == null || (c.getShelf() != null && shelfId.equals(c.getShelf().getId())))
+                .toList();
         Map<Long, BookCompletion> byId = mine.stream()
                 .collect(Collectors.toMap(BookCompletion::getId, Function.identity()));
 
@@ -113,6 +128,26 @@ public class BookShelfService {
             byId.get(completionIds.get(i)).moveTo(i);
         }
         log.info("[Shelf] 순서 변경 - userId={}, count={}", userId, completionIds.size());
+    }
+
+    /** 책장 → 보관함. 인증한 책도 가능 (삭제와 달리 기록·포인트는 그대로) */
+    @Transactional
+    public ShelfBookResponseDto archiveBook(Long userId, Long completionId) {
+        BookCompletion entry = findOwned(userId, completionId);
+        entry.archive();
+        log.info("[Shelf] 보관함으로 - userId={}, completionId={}", userId, completionId);
+        return ShelfBookResponseDto.from(entry);
+    }
+
+    /** 보관함 → 책장. shelfId 가 없으면 원래 있던 책장, 있으면 그 책장의 맨 앞에 꽂힌다 */
+    @Transactional
+    public ShelfBookResponseDto unarchiveBook(Long userId, Long completionId, Long shelfId) {
+        BookCompletion entry = findOwned(userId, completionId);
+        Bookshelf target = shelfId == null ? null : bookshelvesService.findOwned(userId, shelfId);
+        entry.unarchive();
+        if (target != null) entry.moveToShelf(target);
+        log.info("[Shelf] 책장으로 - userId={}, completionId={}", userId, completionId);
+        return ShelfBookResponseDto.from(entry);
     }
 
     @Transactional

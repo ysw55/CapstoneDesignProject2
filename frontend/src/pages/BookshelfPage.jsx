@@ -11,7 +11,19 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { BadgeCheck, ChevronRight, LibraryBig, LockKeyhole, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowRightLeft,
+  BadgeCheck,
+  ChevronRight,
+  LibraryBig,
+  LockKeyhole,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import ScreenHeader from '../components/common/ScreenHeader';
 import EmptyState from '../components/common/EmptyState';
 import { IconButton } from '../components/common/IconButton';
@@ -22,7 +34,8 @@ import BookCover from '../components/book/BookCover';
 import BookSpine from '../components/book/BookSpine';
 import ShelfOrnament from '../components/book/ShelfOrnament';
 import LoadingScreen from '../components/common/LoadingScreen';
-import { compareShelf, useAppData } from '../context/AppDataContext';
+import { Input } from '../components/form/FormScreen';
+import { MAX_SHELVES, compareShelf, useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import useFlashToast from '../hooks/useFlashToast';
 import { formatDate, todayISO } from '../utils/format';
@@ -55,16 +68,54 @@ function SortableItem({ id, disabled, children }) {
 
 export default function BookshelfPage() {
   const navigate = useNavigate();
-  const { books, shelfStatus, shelfError, reloadShelf, highlightBookId, highlightBookIsNew, deleteBook, clearHighlight, reorderBooks } =
-    useAppData();
+  const {
+    books,
+    shelfStatus,
+    shelfError,
+    reloadShelf,
+    highlightBookId,
+    highlightBookIsNew,
+    deleteBook,
+    clearHighlight,
+    reorderBooks,
+    archiveBook,
+    unarchiveBook,
+    shelves,
+    selectedShelfId,
+    selectShelf,
+    createShelf,
+    renameShelf,
+    deleteShelf,
+    moveBook,
+  } = useAppData();
   const { status: authStatus, openLogin } = useAuth();
   const [editMode, setEditMode] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [detailBook, setDetailBook] = useState(null); // 눌러서 상세를 보고 있는 책
+  const [view, setView] = useState('shelf'); // 'shelf' | 'archive'
+  const [renameTarget, setRenameTarget] = useState(null); // 이름을 바꾸는 책장
+  const [renameValue, setRenameValue] = useState('');
+  const [shelfDeleteTarget, setShelfDeleteTarget] = useState(null);
+  const [moveTarget, setMoveTarget] = useState(null); // 다른 책장으로 옮길 책
+  const [unarchiveTarget, setUnarchiveTarget] = useState(null); // 보관함에서 꺼낼 책 (꽂을 책장을 고르는 중)
   const [toast, showToast] = useFlashToast(clearHighlight);
 
   // 직접 정한 순서대로, 정한 적 없는 책은 맨 앞에 최근 완독 순으로 (서버와 같은 규칙)
   const myBooks = useMemo(() => [...books].sort(compareShelf), [books]);
+  // 보고 있는 책장 (선택한 책장이 없으면 첫 번째)
+  const activeShelf = shelves.find((s) => s.id === selectedShelfId) ?? shelves[0] ?? null;
+  // 책장 지정이 아직 없는 책은 첫 번째 책장에 있는 것으로 본다
+  const shelfOf = (b) => b.shelfId ?? shelves[0]?.id;
+  // 책장에는 보관하지 않은 책만 꽂고, 보관함은 모든 책장이 함께 쓰며 최근 완독 순으로 보여준다
+  const shelfBooks = useMemo(
+    () => myBooks.filter((b) => !b.archived && activeShelf && (b.shelfId ?? shelves[0]?.id) === activeShelf.id),
+    [myBooks, activeShelf, shelves]
+  );
+  const countOf = (shelf) => myBooks.filter((b) => !b.archived && shelfOf(b) === shelf.id).length;
+  const archivedBooks = useMemo(
+    () => myBooks.filter((b) => b.archived).sort((a, b) => b.completedAt.localeCompare(a.completedAt) || b.id - a.id),
+    [myBooks]
+  );
 
   // 마우스는 살짝 움직이면 시작, 터치는 꾹 눌러야 시작 (그래야 스크롤과 구분됨)
   const sensors = useSensors(
@@ -74,15 +125,15 @@ export default function BookshelfPage() {
 
   const handleDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return;
-    const ids = myBooks.map((b) => b.id);
+    const ids = shelfBooks.map((b) => b.id);
     const next = arrayMove(ids, ids.indexOf(active.id), ids.indexOf(over.id));
-    reorderBooks(next).catch((err) => showToast(err.message));
+    reorderBooks(next, activeShelf.id).catch((err) => showToast(err.message));
   };
 
   const thisMonth = todayISO().slice(0, 7); // "2026-10"
   const thisMonthCount = myBooks.filter((b) => b.completedAt.startsWith(thisMonth)).length;
   const thisYearCount = myBooks.filter((b) => b.completedAt.startsWith(thisMonth.slice(0, 4))).length;
-  const goAdd = () => navigate('/books/new');
+  const goAdd = () => navigate(activeShelf && view === 'shelf' ? `/books/new?shelfId=${activeShelf.id}` : '/books/new');
   const certifiedCount = myBooks.filter((b) => b.certified).length;
 
   const confirmDelete = async () => {
@@ -91,7 +142,86 @@ export default function BookshelfPage() {
     try {
       await deleteBook(target.id);
       showToast('책장에서 뺐어요');
-      if (books.length === 1) setEditMode(false); // 마지막 책이었으면 편집 모드 종료
+      if (shelfBooks.length === 1) setEditMode(false); // 책장의 마지막 책이었으면 편집 모드 종료
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  const handleArchive = async (book) => {
+    setDetailBook(null);
+    try {
+      await archiveBook(book.id);
+      showToast('보관함으로 옮겼어요');
+      if (shelfBooks.length === 1) setEditMode(false);
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  // 책장이 여러 개면 어느 책장에 꽂을지 고르게 한다
+  const startUnarchive = (book) => {
+    setDetailBook(null);
+    if (shelves.length > 1) setUnarchiveTarget(book);
+    else handleUnarchive(book, shelves[0]);
+  };
+
+  const handleUnarchive = async (book, shelf) => {
+    setUnarchiveTarget(null);
+    try {
+      await unarchiveBook(book.id, shelf?.id);
+      showToast(`${shelf?.name ?? '책장'}에 다시 꽂았어요`);
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  const handleCreateShelf = async () => {
+    try {
+      const name = await createShelf();
+      setEditMode(false);
+      showToast(`새 책장을 만들었어요 · ${name}`);
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  const openRename = () => {
+    setRenameTarget(activeShelf);
+    setRenameValue(activeShelf.name);
+  };
+
+  const confirmRename = async () => {
+    const target = renameTarget;
+    const name = renameValue.trim();
+    if (!name) return;
+    setRenameTarget(null);
+    try {
+      await renameShelf(target.id, name);
+      showToast('책장 이름을 바꿨어요');
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  const confirmDeleteShelf = async () => {
+    const target = shelfDeleteTarget;
+    setShelfDeleteTarget(null);
+    try {
+      await deleteShelf(target.id);
+      setEditMode(false);
+      showToast('책장을 삭제했어요');
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  const handleMove = async (book, shelf) => {
+    setMoveTarget(null);
+    try {
+      await moveBook(book.id, shelf.id);
+      selectShelf(shelf.id);
+      showToast(`${shelf.name}(으)로 옮겼어요`);
     } catch (err) {
       showToast(err.message);
     }
@@ -99,7 +229,7 @@ export default function BookshelfPage() {
 
   const headerActions = (
     <>
-      {shelfStatus === 'ready' && myBooks.length > 0 && (
+      {shelfStatus === 'ready' && view === 'shelf' && myBooks.length > 0 && (
         <EditToggle
           type="button"
           aria-pressed={editMode}
@@ -180,7 +310,7 @@ export default function BookshelfPage() {
 
           {editMode ? (
             <EditHint>
-              책을 끌어서 순서를 바꾸고, 버튼으로 수정하거나 뺄 수 있어요 · 인증한 책은 표지 색만 바꿀 수 있어요
+              책을 끌어서 순서를 바꾸고, 버튼으로 수정하거나 뺄 수 있어요 · 인증한 책은 삭제 대신 보관함으로 옮길 수 있어요
             </EditHint>
           ) : (
             <CertifyBanner type="button" onClick={() => navigate('/books/certify')}>
@@ -193,115 +323,242 @@ export default function BookshelfPage() {
             </CertifyBanner>
           )}
 
-          <Shelves>
-            <Crown aria-hidden />
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={myBooks.map((b) => b.id)} strategy={rectSortingStrategy}>
-                <Cabinet>
-                  <Keystone aria-hidden />
-                  <ShelfOrnament side="left" />
-                  <ShelfOrnament side="right" />
-                  <PillarBlock $side="left" aria-hidden />
-                  <PillarBlock $side="right" aria-hidden />
-                  <PillarBlock $side="left" $bottom aria-hidden />
-                  <PillarBlock $side="right" $bottom aria-hidden />
-                  {toShelves(myBooks).map((shelf) => (
-                    <Shelf key={shelf[0].id}>
-                      <BookRow $spine={SPINE_VIEW}>
-                        {shelf.map((book) => (
-                          <SortableItem key={book.id} id={book.id} disabled={!editMode}>
-                            {(dragProps) => (
-                              <BookSlot
-                                $new={book.id === highlightBookId}
-                                title={SPINE_VIEW ? `${book.title} · ${formatDate(book.completedAt)} 완독` : undefined}
-                              >
-                                {SPINE_VIEW && highlightBookIsNew && book.id === highlightBookId && (
-                                  <SpineNew>NEW</SpineNew>
-                                )}
-                                <DragArea
-                                  $on={editMode}
-                                  {...(editMode
-                                    ? dragProps
-                                    : {
-                                        role: 'button',
-                                        tabIndex: 0,
-                                        'aria-label': `${book.title} 상세 보기`,
-                                        onClick: () => setDetailBook(book),
-                                        onKeyDown: (e) => e.key === 'Enter' && setDetailBook(book),
-                                      })}
+          <ViewTabs role="tablist">
+            <ViewTab
+              type="button"
+              role="tab"
+              aria-selected={view === 'shelf'}
+              $active={view === 'shelf'}
+              onClick={() => setView('shelf')}
+            >
+              책장 <em>{shelfBooks.length}</em>
+            </ViewTab>
+            <ViewTab
+              type="button"
+              role="tab"
+              aria-selected={view === 'archive'}
+              $active={view === 'archive'}
+              onClick={() => {
+                setEditMode(false);
+                setView('archive');
+              }}
+            >
+              보관함 <em>{archivedBooks.length}</em>
+            </ViewTab>
+          </ViewTabs>
+
+          {view === 'shelf' && activeShelf && (
+            <>
+              <ShelfTabs role="tablist" aria-label="내 책장">
+                {shelves.map((shelf) => (
+                  <ShelfChip
+                    key={shelf.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={shelf.id === activeShelf.id}
+                    $active={shelf.id === activeShelf.id}
+                    onClick={() => selectShelf(shelf.id)}
+                  >
+                    {shelf.name}
+                    <em>{countOf(shelf)}</em>
+                  </ShelfChip>
+                ))}
+                {shelves.length < MAX_SHELVES && (
+                  <AddShelfChip type="button" aria-label="책장 추가" onClick={handleCreateShelf}>
+                    <Plus size={16} strokeWidth={2.4} aria-hidden />
+                  </AddShelfChip>
+                )}
+              </ShelfTabs>
+
+              {editMode && (
+                <ShelfManage>
+                  <ShelfManageButton type="button" onClick={openRename}>
+                    <Pencil size={14} strokeWidth={2.2} aria-hidden />
+                    이름 바꾸기
+                  </ShelfManageButton>
+                  <ShelfManageButton
+                    type="button"
+                    $danger
+                    disabled={shelves.length <= 1}
+                    onClick={() => setShelfDeleteTarget(activeShelf)}
+                  >
+                    <Trash2 size={14} strokeWidth={2.2} aria-hidden />
+                    책장 삭제
+                  </ShelfManageButton>
+                </ShelfManage>
+              )}
+            </>
+          )}
+
+          {view === 'archive' ? (
+            archivedBooks.length === 0 ? (
+              <EmptyState
+                icon={Archive}
+                title="보관함이 비어 있어요"
+                description={'책장에서 치우고 싶은 책은\n보관함으로 옮겨 두세요.\n인증 기록과 포인트는 그대로 남아요.'}
+              />
+            ) : (
+              <ArchiveList>
+                {archivedBooks.map((book) => (
+                  <ArchiveItem key={book.id}>
+                    <ArchiveMain type="button" onClick={() => setDetailBook(book)}>
+                      <BookCover title={book.title} author={book.author} color={book.coverColor} imageUrl={book.coverImageUrl} size="sm" />
+                      <ArchiveText>
+                        <strong>{book.title}</strong>
+                        <span>
+                          {book.author} · {formatDate(book.completedAt)}
+                          {book.certified && (
+                            <ArchiveCertified aria-label="완독 인증 완료">
+                              <BadgeCheck size={12} strokeWidth={2.6} aria-hidden />
+                            </ArchiveCertified>
+                          )}
+                        </span>
+                      </ArchiveText>
+                    </ArchiveMain>
+                    <ArchiveRestoreButton type="button" onClick={() => startUnarchive(book)}>
+                      <ArchiveRestore size={15} strokeWidth={2.2} aria-hidden />
+                      꺼내기
+                    </ArchiveRestoreButton>
+                  </ArchiveItem>
+                ))}
+              </ArchiveList>
+            )
+          ) : shelfBooks.length === 0 ? (
+            <EmptyState
+              icon={LibraryBig}
+              title="이 책장은 비어 있어요"
+              description={
+                archivedBooks.length > 0
+                  ? `책을 추가하거나 보관함(${archivedBooks.length}권)에서 꺼내 꽂아 보세요.`
+                  : '책을 추가하거나 다른 책장에서 옮겨 보세요.'
+              }
+              action={
+                <Button $variant="primary" onClick={goAdd}>
+                  <Plus size={18} strokeWidth={2.2} aria-hidden />이 책장에 추가하기
+                </Button>
+              }
+            />
+          ) : (
+            <>
+            <Shelves>
+              <Crown aria-hidden />
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={shelfBooks.map((b) => b.id)} strategy={rectSortingStrategy}>
+                  <Cabinet>
+                    <Keystone aria-hidden />
+                    <ShelfOrnament side="left" />
+                    <ShelfOrnament side="right" />
+                    <PillarBlock $side="left" aria-hidden />
+                    <PillarBlock $side="right" aria-hidden />
+                    <PillarBlock $side="left" $bottom aria-hidden />
+                    <PillarBlock $side="right" $bottom aria-hidden />
+                    {toShelves(shelfBooks).map((shelf) => (
+                      <Shelf key={shelf[0].id}>
+                        <BookRow $spine={SPINE_VIEW}>
+                          {shelf.map((book) => (
+                            <SortableItem key={book.id} id={book.id} disabled={!editMode}>
+                              {(dragProps) => (
+                                <BookSlot
+                                  $new={book.id === highlightBookId}
+                                  title={SPINE_VIEW ? `${book.title} · ${formatDate(book.completedAt)} 완독` : undefined}
                                 >
-                                  <Wiggle $on={editMode}>
-                                    {SPINE_VIEW ? (
-                                      <BookSpine
-                                        title={book.title}
-                                        author={book.author}
-                                        color={book.coverColor}
-                                        seed={book.id}
-                                        certified={book.certified}
-                                      />
-                                    ) : (
-                                      <BookCover title={book.title} author={book.author} color={book.coverColor} />
-                                    )}
-                                  </Wiggle>
-                                </DragArea>
-                                {editMode && (
-                                  <CoverActions $below={SPINE_VIEW}>
-                                    <CoverButton
-                                      type="button"
-                                      aria-label={`${book.title} 수정`}
-                                      onClick={() => navigate(`/books/${book.id}/edit`)}
-                                    >
-                                      <Pencil size={14} strokeWidth={2.2} />
-                                    </CoverButton>
-                                    {/* 완독 인증한 책은 보상 중복을 막기 위해 삭제 불가 (서버도 409 로 거절) */}
-                                    {!book.certified && (
+                                  {SPINE_VIEW && highlightBookIsNew && book.id === highlightBookId && (
+                                    <SpineNew>NEW</SpineNew>
+                                  )}
+                                  <DragArea
+                                    $on={editMode}
+                                    {...(editMode
+                                      ? dragProps
+                                      : {
+                                          role: 'button',
+                                          tabIndex: 0,
+                                          'aria-label': `${book.title} 상세 보기`,
+                                          onClick: () => setDetailBook(book),
+                                          onKeyDown: (e) => e.key === 'Enter' && setDetailBook(book),
+                                        })}
+                                  >
+                                    <Wiggle $on={editMode}>
+                                      {SPINE_VIEW ? (
+                                        <BookSpine
+                                          title={book.title}
+                                          author={book.author}
+                                          color={book.coverColor}
+                                          seed={book.id}
+                                          certified={book.certified}
+                                        />
+                                      ) : (
+                                        <BookCover title={book.title} author={book.author} color={book.coverColor} />
+                                      )}
+                                    </Wiggle>
+                                  </DragArea>
+                                  {editMode && (
+                                    <CoverActions $below={SPINE_VIEW}>
                                       <CoverButton
                                         type="button"
-                                        aria-label={`${book.title} 삭제`}
-                                        $danger
-                                        onClick={() => setDeleteTarget(book)}
+                                        aria-label={`${book.title} 수정`}
+                                        onClick={() => navigate(`/books/${book.id}/edit`)}
                                       >
-                                        <Trash2 size={14} strokeWidth={2.2} />
+                                        <Pencil size={14} strokeWidth={2.2} />
                                       </CoverButton>
-                                    )}
-                                  </CoverActions>
-                                )}
-                              </BookSlot>
-                            )}
-                          </SortableItem>
-                        ))}
-                      </BookRow>
-                      <Plank aria-hidden />
-                      {SPINE_VIEW ? (
-                        // 책등에 제목이 있으니 캡션은 없다. 편집 모드에서만 버튼이 놓일 자리를 남긴다
-                        <SpineFooter $editing={editMode} />
-                      ) : (
-                        <CaptionRow>
-                          {shelf.map((book) => (
-                            <Caption key={book.id}>
-                              <CaptionTitle>
-                                {highlightBookIsNew && book.id === highlightBookId && <NewBadge>NEW</NewBadge>}
-                                {book.title}
-                              </CaptionTitle>
-                              <CaptionDate>
-                                {book.certified && (
-                                  <CertifiedMark aria-label="완독 인증 완료">
-                                    <BadgeCheck size={12} strokeWidth={2.6} aria-hidden />
-                                  </CertifiedMark>
-                                )}
-                                {formatDate(book.completedAt)} 완독
-                              </CaptionDate>
-                            </Caption>
+                                      {/* 완독 인증한 책은 보상 중복을 막기 위해 삭제 불가(서버도 409) → 대신 보관함으로 */}
+                                      {book.certified ? (
+                                        <CoverButton
+                                          type="button"
+                                          aria-label={`${book.title} 보관함으로`}
+                                          onClick={() => handleArchive(book)}
+                                        >
+                                          <Archive size={14} strokeWidth={2.2} />
+                                        </CoverButton>
+                                      ) : (
+                                        <CoverButton
+                                          type="button"
+                                          aria-label={`${book.title} 삭제`}
+                                          $danger
+                                          onClick={() => setDeleteTarget(book)}
+                                        >
+                                          <Trash2 size={14} strokeWidth={2.2} />
+                                        </CoverButton>
+                                      )}
+                                    </CoverActions>
+                                  )}
+                                </BookSlot>
+                              )}
+                            </SortableItem>
                           ))}
-                        </CaptionRow>
-                      )}
-                    </Shelf>
-                  ))}
-                </Cabinet>
-              </SortableContext>
-            </DndContext>
-            <Plinth aria-hidden />
-          </Shelves>
+                        </BookRow>
+                        <Plank aria-hidden />
+                        {SPINE_VIEW ? (
+                          // 책등에 제목이 있으니 캡션은 없다. 편집 모드에서만 버튼이 놓일 자리를 남긴다
+                          <SpineFooter $editing={editMode} />
+                        ) : (
+                          <CaptionRow>
+                            {shelf.map((book) => (
+                              <Caption key={book.id}>
+                                <CaptionTitle>
+                                  {highlightBookIsNew && book.id === highlightBookId && <NewBadge>NEW</NewBadge>}
+                                  {book.title}
+                                </CaptionTitle>
+                                <CaptionDate>
+                                  {book.certified && (
+                                    <CertifiedMark aria-label="완독 인증 완료">
+                                      <BadgeCheck size={12} strokeWidth={2.6} aria-hidden />
+                                    </CertifiedMark>
+                                  )}
+                                  {formatDate(book.completedAt)} 완독
+                                </CaptionDate>
+                              </Caption>
+                            ))}
+                          </CaptionRow>
+                        )}
+                      </Shelf>
+                    ))}
+                  </Cabinet>
+                </SortableContext>
+              </DndContext>
+              <Plinth aria-hidden />
+            </Shelves>
+            </>
+          )}
         </>
       )}
 
@@ -311,7 +568,13 @@ export default function BookshelfPage() {
         {detailBook && (
           <Detail>
             <DetailCover>
-              <BookCover title={detailBook.title} author={detailBook.author} color={detailBook.coverColor} size="lg" />
+              <BookCover
+                title={detailBook.title}
+                author={detailBook.author}
+                color={detailBook.coverColor}
+                imageUrl={detailBook.coverImageUrl}
+                size="lg"
+              />
             </DetailCover>
             <DetailInfo>
               <DetailTitle>{detailBook.title}</DetailTitle>
@@ -335,19 +598,105 @@ export default function BookshelfPage() {
         )}
         {detailBook && (
           <DetailActions>
-            <Button $variant="secondary" onClick={() => navigate(`/books/${detailBook.id}/edit`)}>
-              <Pencil size={16} strokeWidth={2.2} aria-hidden />
-              수정
-            </Button>
             {!detailBook.certified && (
-              <Button $variant="primary" onClick={() => navigate(`/books/certify?bookId=${detailBook.id}`)}>
+              <Button $variant="primary" $block onClick={() => navigate(`/books/certify?bookId=${detailBook.id}`)}>
                 <BadgeCheck size={18} strokeWidth={2.2} aria-hidden />
                 완독 인증하기
               </Button>
             )}
+            <ActionTiles>
+              <ActionTile type="button" onClick={() => navigate(`/books/${detailBook.id}/edit`)}>
+                <Pencil size={20} strokeWidth={2} aria-hidden />
+                수정
+              </ActionTile>
+              {!detailBook.archived && shelves.length > 1 && (
+                <ActionTile
+                  type="button"
+                  onClick={() => {
+                    setMoveTarget(detailBook);
+                    setDetailBook(null);
+                  }}
+                >
+                  <ArrowRightLeft size={20} strokeWidth={2} aria-hidden />
+                  책장 옮기기
+                </ActionTile>
+              )}
+              {detailBook.archived ? (
+                <ActionTile type="button" onClick={() => startUnarchive(detailBook)}>
+                  <ArchiveRestore size={20} strokeWidth={2} aria-hidden />
+                  책장으로
+                </ActionTile>
+              ) : (
+                <ActionTile type="button" onClick={() => handleArchive(detailBook)}>
+                  <Archive size={20} strokeWidth={2} aria-hidden />
+                  보관함으로
+                </ActionTile>
+              )}
+            </ActionTiles>
           </DetailActions>
         )}
       </BottomSheet>
+
+      <BottomSheet open={Boolean(moveTarget)} onClose={() => setMoveTarget(null)} title="어느 책장으로 옮길까요?">
+        {moveTarget && (
+          <MoveList>
+            {shelves
+              .filter((s) => s.id !== shelfOf(moveTarget))
+              .map((shelf) => (
+                <MoveItem key={shelf.id} type="button" onClick={() => handleMove(moveTarget, shelf)}>
+                  {shelf.name}
+                  <em>{countOf(shelf)}권</em>
+                </MoveItem>
+              ))}
+          </MoveList>
+        )}
+      </BottomSheet>
+
+      <BottomSheet open={Boolean(unarchiveTarget)} onClose={() => setUnarchiveTarget(null)} title="어느 책장에 꽂을까요?">
+        {unarchiveTarget && (
+          <MoveList>
+            {shelves.map((shelf) => (
+              <MoveItem key={shelf.id} type="button" onClick={() => handleUnarchive(unarchiveTarget, shelf)}>
+                {shelf.name}
+                <em>{shelf.id === shelfOf(unarchiveTarget) ? '원래 있던 책장' : `${countOf(shelf)}권`}</em>
+              </MoveItem>
+            ))}
+          </MoveList>
+        )}
+      </BottomSheet>
+
+      <BottomSheet open={Boolean(renameTarget)} onClose={() => setRenameTarget(null)} title="책장 이름 바꾸기">
+        <RenameForm
+          onSubmit={(e) => {
+            e.preventDefault();
+            confirmRename();
+          }}
+        >
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="예) 소설, 자기계발"
+            maxLength={20}
+            autoComplete="off"
+            aria-label="책장 이름"
+          />
+          <Button type="submit" $variant="primary" $block disabled={!renameValue.trim()}>
+            저장
+          </Button>
+        </RenameForm>
+      </BottomSheet>
+
+      <ConfirmDialog
+        open={Boolean(shelfDeleteTarget)}
+        title="책장을 삭제할까요?"
+        message={
+          shelfDeleteTarget &&
+          `『${shelfDeleteTarget.name}』에 꽂힌 책 ${countOf(shelfDeleteTarget)}권은 지워지지 않고\n'${shelves.find((s) => s.id !== shelfDeleteTarget.id)?.name}'(으)로 옮겨져요.`
+        }
+        confirmLabel="삭제"
+        onConfirm={confirmDeleteShelf}
+        onCancel={() => setShelfDeleteTarget(null)}
+      />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
@@ -439,11 +788,275 @@ const DetailCertified = styled.span`
 
 const DetailActions = styled.div`
   display: flex;
-  gap: ${({ theme }) => theme.space(2)};
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space(3)};
   margin-top: ${({ theme }) => theme.space(6)};
+`;
 
-  > button {
-    flex: 1;
+/* 보조 동작: 개수(2~3개)에 맞춰 같은 폭으로 나눈다. 아이콘 위 · 글자 아래라 글자가 꺾이지 않는다 */
+const ActionTiles = styled.div`
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: ${({ theme }) => theme.space(2)};
+`;
+
+const ActionTile = styled.button`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 68px;
+  padding: 8px 4px;
+  border-radius: ${({ theme }) => theme.radius.md};
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  color: ${({ theme }) => theme.colors.textPrimary};
+  background: ${({ theme }) => theme.colors.surfaceMuted};
+  transition:
+    background ${({ theme }) => theme.motion.fast},
+    transform ${({ theme }) => theme.motion.fast};
+
+  svg {
+    color: ${({ theme }) => theme.colors.textSecondary};
+  }
+
+  &:active {
+    transform: scale(0.97);
+    background: ${({ theme }) => theme.colors.accentSoft};
+  }
+`;
+
+const ViewTabs = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.space(1)};
+  margin: 0 ${({ theme }) => theme.layout.gutter} ${({ theme }) => theme.space(4)};
+  padding: 3px;
+  border-radius: ${({ theme }) => theme.radius.pill};
+  background: ${({ theme }) => theme.colors.surfaceMuted};
+`;
+
+const ViewTab = styled.button`
+  flex: 1;
+  height: 34px;
+  border-radius: ${({ theme }) => theme.radius.pill};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: 700;
+  color: ${({ $active, theme }) => ($active ? theme.colors.textPrimary : theme.colors.textTertiary)};
+  background: ${({ $active, theme }) => ($active ? theme.colors.surface : 'transparent')};
+  box-shadow: ${({ $active, theme }) => ($active ? theme.shadow.card : 'none')};
+  transition:
+    background ${({ theme }) => theme.motion.fast},
+    color ${({ theme }) => theme.motion.fast};
+
+  em {
+    margin-left: 2px;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    color: ${({ $active, theme }) => ($active ? theme.colors.accent : 'inherit')};
+  }
+`;
+
+const ShelfTabs = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.space(2)};
+  margin: 0 0 ${({ theme }) => theme.space(4)};
+  padding: 0 ${({ theme }) => theme.layout.gutter};
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
+const ShelfChip = styled.button`
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid ${({ $active, theme }) => ($active ? theme.colors.accent : theme.colors.border)};
+  border-radius: ${({ theme }) => theme.radius.pill};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: 700;
+  white-space: nowrap;
+  color: ${({ $active, theme }) => ($active ? theme.colors.onAccent : theme.colors.textPrimary)};
+  background: ${({ $active, theme }) => ($active ? theme.colors.accent : theme.colors.surface)};
+  transition:
+    background ${({ theme }) => theme.motion.fast},
+    transform ${({ theme }) => theme.motion.fast};
+
+  em {
+    font-style: normal;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
+const AddShelfChip = styled.button`
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px dashed ${({ theme }) => theme.colors.textTertiary};
+  border-radius: 50%;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  background: transparent;
+
+  &:active {
+    background: ${({ theme }) => theme.colors.surfaceMuted};
+  }
+`;
+
+/* 편집 모드에서 보고 있는 책장의 이름 바꾸기 · 삭제 */
+const ShelfManage = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.space(2)};
+  margin: -4px ${({ theme }) => theme.layout.gutter} ${({ theme }) => theme.space(4)};
+`;
+
+const ShelfManageButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: ${({ theme }) => theme.radius.pill};
+  font-size: 13px;
+  font-weight: 700;
+  color: ${({ $danger, theme }) => ($danger ? theme.colors.danger : theme.colors.textPrimary)};
+  background: ${({ $danger, theme }) => ($danger ? theme.colors.dangerSoft : theme.colors.surfaceMuted)};
+
+  &:disabled {
+    opacity: 0.4;
+  }
+`;
+
+const MoveList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space(2)};
+`;
+
+const MoveItem = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 ${({ theme }) => theme.space(4)};
+  border-radius: ${({ theme }) => theme.radius.md};
+  font-size: ${({ theme }) => theme.fontSize.md};
+  font-weight: 700;
+  background: ${({ theme }) => theme.colors.surfaceMuted};
+
+  em {
+    font-style: normal;
+    font-size: 13px;
+    font-weight: 500;
+    color: ${({ theme }) => theme.colors.textTertiary};
+  }
+
+  &:active {
+    background: ${({ theme }) => theme.colors.accentSoft};
+  }
+`;
+
+const RenameForm = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space(3)};
+`;
+
+const ArchiveList = styled.ul`
+  margin: 0 ${({ theme }) => theme.layout.gutter} ${({ theme }) => theme.space(8)};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.radius.lg};
+  overflow: hidden;
+  list-style: none;
+`;
+
+const ArchiveItem = styled.li`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.space(2)};
+  padding: 12px 12px 12px 14px;
+  background: ${({ theme }) => theme.colors.surface};
+
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.colors.border};
+  }
+`;
+
+const ArchiveMain = styled.button`
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: ${({ theme }) => theme.space(3)};
+  min-width: 0;
+  text-align: left;
+`;
+
+const ArchiveText = styled.span`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: ${({ theme }) => theme.fontSize.md};
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: ${({ theme }) => theme.colors.textSecondary};
+    font-variant-numeric: tabular-nums;
+  }
+`;
+
+/* 흰 배경 위에서는 금색 대신 딥그린 */
+const ArchiveCertified = styled.span`
+  display: inline-grid;
+  place-items: center;
+  margin-left: 4px;
+  vertical-align: -2px;
+  color: ${({ theme }) => theme.colors.accent};
+`;
+
+const ArchiveRestoreButton = styled.button`
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: ${({ theme }) => theme.radius.pill};
+  font-size: 13px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.accent};
+  background: ${({ theme }) => theme.colors.accentSoft};
+  transition: transform ${({ theme }) => theme.motion.fast};
+
+  &:active {
+    transform: scale(0.94);
   }
 `;
 

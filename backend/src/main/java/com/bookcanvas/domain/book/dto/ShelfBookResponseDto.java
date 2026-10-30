@@ -18,7 +18,9 @@ import java.time.LocalDateTime;
  *   "certified": true,             // 완독 인증(✓ 배지) 여부
  *   "certifiedAt": "2026-10-12T21:03:00",
  *   "earnedPoint": 100,
- *   "shelfOrder": 2                // 직접 정한 위치. 정한 적 없으면 null
+ *   "shelfOrder": 2,               // 직접 정한 위치. 정한 적 없으면 null
+ *   "archived": false,             // 보관함에 있는 책이면 true
+ *   "shelfId": 3                   // 꽂혀 있는 책장
  * }
  * }</pre>
  */
@@ -30,7 +32,9 @@ public record ShelfBookResponseDto(
         boolean certified,
         LocalDateTime certifiedAt,
         int earnedPoint,
-        Integer shelfOrder
+        Integer shelfOrder,
+        boolean archived,
+        Long shelfId
 ) {
     public static ShelfBookResponseDto from(BookCompletion c) {
         Book b = c.getBook();
@@ -42,7 +46,9 @@ public record ShelfBookResponseDto(
                 c.isCertified(),
                 c.getCertifiedAt(),
                 c.getEarnedPoint(),
-                c.getShelfOrder()
+                c.getShelfOrder(),
+                c.isArchived(),
+                c.getShelf() == null ? null : c.getShelf().getId()
         );
     }
 }

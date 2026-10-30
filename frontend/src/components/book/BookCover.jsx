@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { isLightColor } from '../../utils/format';
 
@@ -6,10 +6,15 @@ import { isLightColor } from '../../utils/format';
  * 표지 이미지가 없을 때 쓰는 단색 책 표지.
  * size: 'sm'(랭킹 리스트) | 'md'(책장) | 'lg'(1위 카드)
  */
-export default function BookCover({ title, author, color, size = 'md' }) {
+export default function BookCover({ title, author, color, size = 'md', imageUrl }) {
+  // 도서 검색으로 가져온 실제 표지가 있으면 그걸 보여주고, 불러오지 못하면 단색 표지로 되돌린다
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = Boolean(imageUrl) && !imageFailed;
+
   return (
-    <Cover $color={color} $light={isLightColor(color)} $size={size} aria-label={`${title} 표지`}>
-      {size !== 'sm' && (
+    <Cover $color={color} $light={isLightColor(color)} $size={size} $image={showImage} aria-label={`${title} 표지`}>
+      {showImage && <CoverImage src={imageUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />}
+      {!showImage && size !== 'sm' && (
         <>
           <CoverTitle $size={size}>{title}</CoverTitle>
           {author && <CoverAuthor>{author}</CoverAuthor>}
@@ -33,7 +38,7 @@ const Cover = styled.div`
   flex-shrink: 0;
   width: ${({ $size }) => SIZES[$size].width};
   aspect-ratio: 2 / 3;
-  padding: ${({ $size }) => ($size === 'sm' ? 0 : '12px 10px 10px 14px')};
+  padding: ${({ $size, $image }) => ($size === 'sm' || $image ? 0 : '12px 10px 10px 14px')};
   overflow: hidden;
   border-radius: ${({ $size }) => SIZES[$size].radius};
   color: ${({ $light }) => ($light ? '#212529' : '#FFFFFF')};
@@ -56,6 +61,14 @@ const Cover = styled.div`
     );
     pointer-events: none;
   }
+`;
+
+const CoverImage = styled.img`
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 `;
 
 const CoverTitle = styled.p`
