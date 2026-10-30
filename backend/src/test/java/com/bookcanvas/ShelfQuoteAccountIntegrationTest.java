@@ -25,7 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 내 책장 동기화 · 커뮤니티 피드 · 비밀번호 변경 · 시연용 간편 로그인 통합 테스트 (H2)
  */
-@SpringBootTest
+// 개발자 PC 의 application-local.yml 에 카카오 키가 있어도 '키 없음' 상태로 테스트한다
+@SpringBootTest(properties = "app.book-search.kakao-rest-api-key=")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
@@ -99,6 +100,163 @@ class ShelfQuoteAccountIntegrationTest {
         // 로그인 없이는 401
         call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of()), null)
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("보관함: 인증한 책도 보관·꺼내기 가능, 보관해도 인증·포인트 유지, 순서 저장은 책장 책만 대상")
+    void shelfArchive() throws Exception {
+        String token = signup("archive@bookcanvas.com", "보관주인");
+        long a = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책A", "2026-10-01"), token)).get("completionId").asLong();
+        long b = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책B", "2026-10-02"), token)).get("completionId").asLong();
+
+        // 책A 완독 인증 → 삭제는 불가(409)
+        call(HttpMethod.POST, "/api/books/completion",
+                Map.of("title", "책A", "author", "헤르만 헤세", "completedAt", "2026-10-01", "reviewText", REVIEW), token)
+                .andExpect(status().isCreated());
+        call(HttpMethod.DELETE, "/api/books/completions/" + a, null, token).andExpect(status().isConflict());
+
+        // 인증한 책도 보관함으로 옮길 수 있고, 인증·포인트는 그대로
+        call(HttpMethod.POST, "/api/books/completions/" + a + "/archive", null, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.archived").value(true))
+                .andExpect(jsonPath("$.certified").value(true))
+                .andExpect(jsonPath("$.earnedPoint").value(100));
+
+        // 같은 책을 다시 추가하려 하면 '보관함에 있음' 안내
+        call(HttpMethod.POST, "/api/books/completions", shelfBook("책A", "2026-10-03"), token)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ALREADY_ARCHIVED"));
+
+        // 순서 저장은 책장에 있는 책(B)만 보낸다. 보관한 책(A)을 섞으면 400
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of(b)), token)
+                .andExpect(status().isNoContent());
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("completionIds", java.util.List.of(a, b)), token)
+                .andExpect(status().isBadRequest());
+
+        // 꺼내면 책장 맨 앞으로 돌아온다
+        call(HttpMethod.DELETE, "/api/books/completions/" + a + "/archive", null, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.archived").value(false))
+                .andExpect(jsonPath("$.shelfOrder").doesNotExist());
+        JsonNode shelf = json(call(HttpMethod.GET, "/api/books/completions", null, token));
+        assertThat(shelf.findValuesAsText("title")).containsExactly("책A", "책B");
+
+        // 남의 책은 보관할 수 없다
+        String other = signup("archive2@bookcanvas.com", "다른사람");
+        call(HttpMethod.POST, "/api/books/completions/" + a + "/archive", null, other).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("여러 책장: 기본 책장 자동 생성, 만들기·이름 변경·최대 5개, 책 옮기기, 책장별 순서, 삭제 시 책 이동")
+    void multipleShelves() throws Exception {
+        String token = signup("shelves@bookcanvas.com", "책장여럿");
+
+        // 책장 기능 이전처럼 책장 지정 없이 책을 꽂아도 첫 번째 책장에 들어간다
+        long a = json(call(HttpMethod.POST, "/api/books/completions", shelfBook("책A", "2026-10-01"), token)).get("completionId").asLong();
+        JsonNode shelves = json(call(HttpMethod.GET, "/api/books/shelves", null, token).andExpect(status().isOk()));
+        assertThat(shelves).hasSize(1);
+        assertThat(shelves.get(0).get("name").asText()).isEqualTo("책장 1");
+        assertThat(shelves.get(0).get("bookCount").asInt()).isEqualTo(1);
+        long first = shelves.get(0).get("shelfId").asLong();
+
+        // 책장 만들기 — 이름을 비우면 "책장 2", 지으면 그 이름
+        long second = json(call(HttpMethod.POST, "/api/books/shelves", Map.of(), token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("책장 2"))
+                .andExpect(jsonPath("$.bookCount").value(0))).get("shelfId").asLong();
+        call(HttpMethod.PUT, "/api/books/shelves/" + second, Map.of("name", "소설"), token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("소설"));
+        call(HttpMethod.PUT, "/api/books/shelves/" + second, Map.of("name", "  "), token)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BOOKSHELF_NAME_REQUIRED"));
+
+        // 특정 책장에 바로 꽂기
+        Map<String, Object> bBody = new java.util.HashMap<>(shelfBook("책B", "2026-10-02"));
+        bBody.put("shelfId", second);
+        long b = json(call(HttpMethod.POST, "/api/books/completions", bBody, token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shelfId").value(second))).get("completionId").asLong();
+
+        // 최대 5개 (현재 2개 → 3개 더 만들면 5개, 그다음은 409)
+        for (int i = 0; i < 3; i++) call(HttpMethod.POST, "/api/books/shelves", Map.of(), token).andExpect(status().isCreated());
+        call(HttpMethod.POST, "/api/books/shelves", Map.of(), token)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("BOOKSHELF_LIMIT_REACHED"));
+
+        // 책 옮기기: A 를 소설 책장으로 → 소설 책장 맨 앞
+        call(HttpMethod.PUT, "/api/books/completions/" + a + "/shelf", Map.of("shelfId", second), token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shelfId").value(second));
+
+        // 책장별 순서 저장: 소설 책장의 B, A 순서로 — 그 책장의 책이 아닌 id 가 섞이면 400
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("shelfId", second, "completionIds", java.util.List.of(b, a)), token)
+                .andExpect(status().isNoContent());
+        call(HttpMethod.PUT, "/api/books/completions/order", Map.of("shelfId", first, "completionIds", java.util.List.of(a)), token)
+                .andExpect(status().isBadRequest());
+
+        // 소설 책장 삭제 → 책 2권은 첫 번째 책장으로
+        call(HttpMethod.DELETE, "/api/books/shelves/" + second, null, token).andExpect(status().isNoContent());
+        JsonNode shelf = json(call(HttpMethod.GET, "/api/books/completions", null, token));
+        assertThat(shelf).hasSize(2);
+        for (JsonNode book : shelf) assertThat(book.get("shelfId").asLong()).isEqualTo(first);
+
+        // 보관함에서 꺼낼 때 책장을 골라서 꽂을 수 있다 (비우면 원래 책장)
+        long third = json(call(HttpMethod.POST, "/api/books/shelves", Map.of("name", "에세이"), token)).get("shelfId").asLong();
+        call(HttpMethod.POST, "/api/books/completions/" + a + "/archive", null, token).andExpect(status().isOk());
+        call(HttpMethod.DELETE, "/api/books/completions/" + a + "/archive?shelfId=" + third, null, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.archived").value(false))
+                .andExpect(jsonPath("$.shelfId").value(third));
+        call(HttpMethod.POST, "/api/books/completions/" + a + "/archive", null, token).andExpect(status().isOk());
+        call(HttpMethod.DELETE, "/api/books/completions/" + a + "/archive", null, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shelfId").value(third)); // 비우면 보관하기 전 책장
+        call(HttpMethod.POST, "/api/books/completions/" + a + "/archive", null, token).andExpect(status().isOk());
+        call(HttpMethod.DELETE, "/api/books/completions/" + a + "/archive?shelfId=999999", null, token)
+                .andExpect(status().isNotFound()); // 없는 책장
+        call(HttpMethod.DELETE, "/api/books/completions/" + a + "/archive", null, token).andExpect(status().isOk());
+
+        // 남의 책장은 쓸 수 없다
+        String other = signup("shelves2@bookcanvas.com", "다른사람");
+        long otherShelf = json(call(HttpMethod.GET, "/api/books/shelves", null, other)).get(0).get("shelfId").asLong();
+        call(HttpMethod.PUT, "/api/books/completions/" + a + "/shelf", Map.of("shelfId", otherShelf), token).andExpect(status().isNotFound());
+        call(HttpMethod.DELETE, "/api/books/shelves/" + first, null, other).andExpect(status().isNotFound());
+        // 마지막 남은 책장은 지울 수 없다
+        call(HttpMethod.DELETE, "/api/books/shelves/" + otherShelf, null, other)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LAST_BOOKSHELF"));
+    }
+
+    @Test
+    @DisplayName("도서 검색: 로그인 필수, 키가 없으면 503, 검색어가 비면 빈 목록 / 검색으로 고른 책은 ISBN·표지 저장, 수상한 표지 주소는 버림")
+    void bookSearchAndAddWithMetadata() throws Exception {
+        call(HttpMethod.GET, "/api/books/search?q=데미안", null, null).andExpect(status().isUnauthorized());
+
+        String token = signup("search@bookcanvas.com", "검색주인");
+        call(HttpMethod.GET, "/api/books/search?q=" + java.net.URLEncoder.encode("데미안", java.nio.charset.StandardCharsets.UTF_8), null, token)
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("BOOK_SEARCH_UNAVAILABLE"));
+        call(HttpMethod.GET, "/api/books/search?q=", null, token)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.results").isEmpty());
+
+        // 검색 결과에서 고른 책: ISBN·출판사·표지가 책 정보로 저장된다
+        Map<String, Object> picked = new java.util.HashMap<>(shelfBook("데미안", "2026-10-01"));
+        picked.put("isbn", "9788937460777");
+        picked.put("publisher", "민음사");
+        picked.put("coverImageUrl", "https://search1.kakaocdn.net/thumb/cover.jpg");
+        call(HttpMethod.POST, "/api/books/completions", picked, token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.book.coverImageUrl").value("https://search1.kakaocdn.net/thumb/cover.jpg"));
+
+        // 카카오 이미지 서버가 아닌 표지 주소는 서버가 나중에 내려받지 않도록 버린다
+        Map<String, Object> sneaky = new java.util.HashMap<>(shelfBook("모모", "2026-10-02"));
+        sneaky.put("isbn", "9788937460111");
+        sneaky.put("coverImageUrl", "http://169.254.169.254/latest/meta-data");
+        call(HttpMethod.POST, "/api/books/completions", sneaky, token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.book.coverImageUrl").doesNotExist());
     }
 
     @Test

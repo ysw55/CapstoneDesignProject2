@@ -38,9 +38,16 @@ public enum ErrorCode {
     INVALID_COMPLETION_DATE(HttpStatus.BAD_REQUEST, "완독 날짜는 오늘 이후로 설정할 수 없어요."),
     ALREADY_COMPLETED(HttpStatus.CONFLICT, "이미 완독 인증한 책이에요."),
     ALREADY_ON_SHELF(HttpStatus.CONFLICT, "이미 책장에 있는 책이에요."),
+    ALREADY_ARCHIVED(HttpStatus.CONFLICT, "보관함에 있는 책이에요. 보관함에서 책장으로 꺼내 주세요."),
+    BOOKSHELF_NOT_FOUND(HttpStatus.NOT_FOUND, "책장을 찾을 수 없어요."),
+    BOOKSHELF_LIMIT_REACHED(HttpStatus.CONFLICT, "책장은 최대 5개까지 만들 수 있어요."),
+    LAST_BOOKSHELF(HttpStatus.CONFLICT, "마지막 책장은 삭제할 수 없어요."),
+    BOOKSHELF_NAME_REQUIRED(HttpStatus.BAD_REQUEST, "책장 이름을 입력해 주세요."),
     SHELF_BOOK_NOT_FOUND(HttpStatus.NOT_FOUND, "책장에서 책을 찾을 수 없어요."),
     INVALID_SHELF_ORDER(HttpStatus.BAD_REQUEST, "책장 순서 정보가 올바르지 않아요. 새로고침 후 다시 시도해 주세요."),
     CERTIFIED_BOOK_LOCKED(HttpStatus.CONFLICT, "완독 인증한 책은 표지 색만 바꿀 수 있고, 삭제할 수 없어요."),
+
+    BOOK_SEARCH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "도서 검색을 지금은 쓸 수 없어요. 직접 입력해 주세요."),
 
     // ── 커뮤니티 ──
     QUOTE_NOT_FOUND(HttpStatus.NOT_FOUND, "글을 찾을 수 없어요. 삭제됐을 수 있어요."),

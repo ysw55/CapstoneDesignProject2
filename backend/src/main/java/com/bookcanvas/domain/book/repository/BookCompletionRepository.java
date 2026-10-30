@@ -31,6 +31,19 @@ public interface BookCompletionRepository extends JpaRepository<BookCompletion, 
             """)
     List<BookCompletion> findShelfByUserId(@Param("userId") Long userId);
 
+    /** 책장이 정해지지 않은 책 (책장 기능 이전 데이터, 완독 인증으로 새로 생긴 책) */
+    List<BookCompletion> findByUserIdAndShelfIsNull(Long userId);
+
+    List<BookCompletion> findByShelfId(Long shelfId);
+
+    /** 책장별 꽂힌 책 수 (보관함 제외) — [shelfId, count] */
+    @Query("""
+            SELECT c.shelf.id, COUNT(c) FROM BookCompletion c
+            WHERE c.user.id = :userId AND c.archived = false AND c.shelf IS NOT NULL
+            GROUP BY c.shelf.id
+            """)
+    List<Object[]> countByShelf(@Param("userId") Long userId);
+
     /** 완독 '인증'한 책 수 (책장에 추가만 한 책은 제외) */
     long countByUserIdAndCertifiedAtIsNotNull(Long userId);
 }

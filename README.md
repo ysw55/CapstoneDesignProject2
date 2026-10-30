@@ -102,6 +102,21 @@ openssl rand -base64 32
 
 > `application-local.yml` 은 `.gitignore` 에 등록되어 있어 커밋되지 않습니다. 같은 이름의 **환경 변수**(`DB_PASSWORD`, `JWT_SECRET`)로 넘겨도 됩니다.
 
+### 4. 도서 검색 키 (선택)
+
+책 추가 화면(`+` 버튼)의 **책 검색**은 [카카오 책 검색 API](https://developers.kakao.com/docs/ko/daum-search/dev-guide)를 씁니다.
+키가 없으면 검색만 꺼지고 **직접 입력**은 그대로 됩니다.
+
+1. [카카오 디벨로퍼스 콘솔](https://developers.kakao.com/console/app)에 카카오 계정으로 로그인 → 앱 만들기 (메뉴 이름은 "내 애플리케이션 → 애플리케이션 추가하기" 또는 "앱 → 앱 생성"으로 보입니다)
+2. 만든 앱을 열어 **앱 → 플랫폼 키 → REST API 키** (예전 화면은 "앱 설정 → 요약 정보") 에서 키 복사
+3. `application-local.yml` 에 한 줄 추가 (또는 환경 변수 `KAKAO_REST_API_KEY`)
+
+```yaml
+KAKAO_REST_API_KEY: 복사한-REST-API-키
+```
+
+서버를 다시 실행하면 적용됩니다.
+
 ---
 
 ## ▶️ 실행 방법
@@ -184,7 +199,12 @@ DROP DATABASE bookcanvas;
 | POST | `/api/auth/password` | 비밀번호 변경 | JWT |
 | GET | `/api/books/completions` | 내 책장 | JWT |
 | POST / PUT / DELETE | `/api/books/completions[/{id}]` | 책장 추가 · 수정 · 삭제 | JWT |
-| PUT | `/api/books/completions/order` | 책장 순서 저장 `{ "completionIds": [내 책장 전체 id를 원하는 순서로] }` | JWT |
+| GET | `/api/books/search?q=&page=` | 도서 검색 (카카오, 10권씩). 키가 없으면 503 `BOOK_SEARCH_UNAVAILABLE` | JWT |
+| GET / POST | `/api/books/shelves` | 책장 목록 · 책장 만들기 (최대 5개, 이름 비우면 "책장 N") | JWT |
+| PUT / DELETE | `/api/books/shelves/{id}` | 책장 이름 바꾸기 · 삭제 (책은 첫 번째 책장으로 이동, 마지막 책장은 삭제 불가) | JWT |
+| PUT | `/api/books/completions/{id}/shelf` | 책을 다른 책장으로 옮기기 `{ "shelfId": 2 }` | JWT |
+| POST / DELETE | `/api/books/completions/{id}/archive` | 보관함으로 옮기기 · 책장으로 꺼내기 (인증한 책도 가능, 기록·포인트 유지) | JWT |
+| PUT | `/api/books/completions/order` | 책장 순서 저장 `{ "shelfId": 2, "completionIds": [그 책장 책 id를 원하는 순서로] }` | JWT |
 | POST | `/api/books/completion` | 완독 인증 (독후감 200자 이상) | JWT |
 | GET | `/api/quotes` | 커뮤니티 피드 | 선택 |
 | POST / PUT / DELETE | `/api/quotes[/{id}]` | 글쓰기 · 수정 · 삭제 | JWT |
