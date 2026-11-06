@@ -19,6 +19,18 @@ export const deleteQuote = (quoteId) => apiFetch(`/api/quotes/${quoteId}`, { met
 export const likeQuote = (quoteId) => apiFetch(`/api/quotes/${quoteId}/like`, { method: 'POST' });
 export const unlikeQuote = (quoteId) => apiFetch(`/api/quotes/${quoteId}/like`, { method: 'DELETE' });
 
+/** 북마크(저장) — 같은 요청을 여러 번 보내도 결과가 같다 @returns {Promise<{ quoteId, bookmarked }>} */
+export const bookmarkQuote = (quoteId) => apiFetch(`/api/quotes/${quoteId}/bookmark`, { method: 'POST' });
+export const unbookmarkQuote = (quoteId) => apiFetch(`/api/quotes/${quoteId}/bookmark`, { method: 'DELETE' });
+
+/**
+ * 내 활동 (JWT 필수) — 프로필의 "좋아요 · 저장한 문장". 최근에 누른 순
+ * @returns {Promise<{ content: { quote: object, actedAt: string }[], totalElements, last, ... }>}
+ */
+export const fetchMyLiked = ({ page = 0, size = 20 } = {}) => apiFetch(`/api/quotes/me/liked?page=${page}&size=${size}`);
+export const fetchMyBookmarked = ({ page = 0, size = 20 } = {}) =>
+  apiFetch(`/api/quotes/me/bookmarked?page=${page}&size=${size}`);
+
 export const fetchComments = (quoteId) => apiFetch(`/api/quotes/${quoteId}/comments`);
 
 export const createComment = (quoteId, content) =>

@@ -209,6 +209,8 @@ DROP DATABASE bookcanvas;
 | GET | `/api/quotes` | 커뮤니티 피드 | 선택 |
 | POST / PUT / DELETE | `/api/quotes[/{id}]` | 글쓰기 · 수정 · 삭제 | JWT |
 | POST / DELETE | `/api/quotes/{id}/like` | 좋아요 · 취소 | JWT |
+| POST / DELETE | `/api/quotes/{id}/bookmark` | 북마크(저장) · 취소 | JWT |
+| GET | `/api/quotes/me/liked` · `/api/quotes/me/bookmarked` | 내가 좋아요 · 저장한 문장 (최근에 누른 순, `?page=&size=`) | JWT |
 | GET / POST | `/api/quotes/{id}/comments` | 댓글 조회 · 작성 | 조회는 공개 |
 
 인증이 필요한 요청에는 `Authorization: Bearer <accessToken>` 헤더를 붙입니다. 에러는 `{ status, code, message, fieldErrors }` 형식으로 응답합니다.

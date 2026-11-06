@@ -1,6 +1,7 @@
 package com.bookcanvas.domain.quote.controller;
 
 import com.bookcanvas.domain.quote.dto.CommentDto;
+import com.bookcanvas.domain.quote.dto.QuoteHistoryResponse;
 import com.bookcanvas.domain.quote.dto.QuoteRequestDto;
 import com.bookcanvas.domain.quote.dto.QuoteResponse;
 import com.bookcanvas.domain.quote.service.QuoteService;
@@ -87,6 +88,36 @@ public class QuoteController {
         return ResponseEntity.ok(quoteService.unlike(authUser.userId(), quoteId));
     }
 
+    @PostMapping("/{quoteId}/bookmark")
+    public ResponseEntity<CommentDto.BookmarkResponse> bookmark(@AuthenticationPrincipal AuthUser authUser, @PathVariable Long quoteId) {
+        return ResponseEntity.ok(quoteService.bookmark(authUser.userId(), quoteId));
+    }
+
+    @DeleteMapping("/{quoteId}/bookmark")
+    public ResponseEntity<CommentDto.BookmarkResponse> unbookmark(@AuthenticationPrincipal AuthUser authUser, @PathVariable Long quoteId) {
+        return ResponseEntity.ok(quoteService.unbookmark(authUser.userId(), quoteId));
+    }
+
+    /** 내가 좋아요한 문장 (최근에 누른 순) — 프로필 "좋아요한 문장" */
+    @GetMapping("/me/liked")
+    public ResponseEntity<PageResponse<QuoteHistoryResponse>> myLiked(
+            @AuthenticationPrincipal AuthUser authUser,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(quoteService.getLikedHistory(authUser.userId(), historyPage(page, size)));
+    }
+
+    /** 내가 저장(북마크)한 문장 (최근에 저장한 순) — 프로필 "저장한 문장" */
+    @GetMapping("/me/bookmarked")
+    public ResponseEntity<PageResponse<QuoteHistoryResponse>> myBookmarked(
+            @AuthenticationPrincipal AuthUser authUser,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(quoteService.getBookmarkedHistory(authUser.userId(), historyPage(page, size)));
+    }
+
     @GetMapping("/{quoteId}/comments")
     public ResponseEntity<List<CommentDto.Response>> getComments(
             @AuthenticationPrincipal AuthUser authUser,
@@ -105,6 +136,11 @@ public class QuoteController {
     }
 
     /** 공개 API 는 비로그인도 호출하므로 principal 이 없을 수 있음 */
+    /** 정렬은 쿼리가 정한다 (누른 시각 순) — Pageable 에는 정렬을 넣지 않는다 */
+    private static PageRequest historyPage(int page, int size) {
+        return PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE));
+    }
+
     private static Long userIdOrNull(AuthUser authUser) {
         return authUser == null ? null : authUser.userId();
     }

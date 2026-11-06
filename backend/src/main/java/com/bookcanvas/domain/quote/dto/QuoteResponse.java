@@ -21,6 +21,7 @@ import java.util.Objects;
  * @param likeCount    좋아요 수
  * @param commentCount 댓글 수
  * @param liked        로그인 사용자가 좋아요를 눌렀는지 (비로그인이면 false)
+ * @param bookmarked   로그인 사용자가 저장(북마크)했는지 (비로그인이면 false)
  * @param mine         로그인 사용자가 쓴 글인지 → 수정/삭제 버튼 표시
  * @param edited       작성 후 수정됐는지
  * @param createdAt    등록 시각
@@ -34,6 +35,7 @@ public record QuoteResponse(
         long likeCount,
         long commentCount,
         boolean liked,
+        boolean bookmarked,
         boolean mine,
         boolean edited,
         LocalDateTime createdAt
@@ -43,7 +45,7 @@ public record QuoteResponse(
      * quoteTagMaps 컬렉션 접근 시 Lazy 로딩이 발생합니다.
      * Quote 엔티티의 {@code @BatchSize(size=100)} 덕분에 N건을 처리해도 IN 쿼리로 일괄 로딩됩니다.
      */
-    public static QuoteResponse of(Quote quote, long likeCount, long commentCount, boolean liked, Long currentUserId) {
+    public static QuoteResponse of(Quote quote, long likeCount, long commentCount, boolean liked, boolean bookmarked, Long currentUserId) {
         return new QuoteResponse(
                 quote.getId(),
                 quote.getContent(),
@@ -53,6 +55,7 @@ public record QuoteResponse(
                 likeCount,
                 commentCount,
                 liked,
+                bookmarked,
                 Objects.equals(quote.getUser().getId(), currentUserId),
                 quote.getEditedAt() != null,
                 quote.getCreatedAt()

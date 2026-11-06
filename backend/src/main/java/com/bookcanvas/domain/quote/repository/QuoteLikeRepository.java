@@ -1,6 +1,8 @@
 package com.bookcanvas.domain.quote.repository;
 
 import com.bookcanvas.domain.quote.entity.QuoteLike;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -26,6 +28,16 @@ public interface QuoteLikeRepository extends JpaRepository<QuoteLike, Long> {
     /** 피드 한 페이지의 좋아요 수를 한 번의 GROUP BY 쿼리로 (N+1 방지). 결과: [quoteId, count] */
     @Query("SELECT l.quote.id, COUNT(l) FROM QuoteLike l WHERE l.quote.id IN :quoteIds GROUP BY l.quote.id")
     List<Object[]> countGroupByQuoteIds(@Param("quoteIds") Collection<Long> quoteIds);
+
+    /** 내가 좋아요한 글 — 최근 누른 순. 구절·작성자·도서는 fetch join 으로 한 번에 */
+    @Query(value = """
+            SELECT l FROM QuoteLike l
+            JOIN FETCH l.quote q JOIN FETCH q.user JOIN FETCH q.book
+            WHERE l.user.id = :userId AND q.isPublic = true
+            ORDER BY l.createdAt DESC, l.id DESC
+            """,
+            countQuery = "SELECT COUNT(l) FROM QuoteLike l WHERE l.user.id = :userId AND l.quote.isPublic = true")
+    Page<QuoteLike> findMyLikes(@Param("userId") Long userId, Pageable pageable);
 
     /** 피드 한 페이지 중 내가 좋아요한 글 ID */
     @Query("SELECT l.quote.id FROM QuoteLike l WHERE l.user.id = :userId AND l.quote.id IN :quoteIds")

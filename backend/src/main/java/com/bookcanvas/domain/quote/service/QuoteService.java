@@ -3,12 +3,15 @@ package com.bookcanvas.domain.quote.service;
 import com.bookcanvas.domain.book.entity.Book;
 import com.bookcanvas.domain.book.service.BookFinder;
 import com.bookcanvas.domain.quote.dto.CommentDto;
+import com.bookcanvas.domain.quote.dto.QuoteHistoryResponse;
 import com.bookcanvas.domain.quote.dto.QuoteRequestDto;
 import com.bookcanvas.domain.quote.dto.QuoteResponse;
 import com.bookcanvas.domain.quote.entity.Quote;
+import com.bookcanvas.domain.quote.entity.QuoteBookmark;
 import com.bookcanvas.domain.quote.entity.QuoteComment;
 import com.bookcanvas.domain.quote.entity.QuoteLike;
 import com.bookcanvas.domain.quote.entity.QuoteTagMap;
+import com.bookcanvas.domain.quote.repository.QuoteBookmarkRepository;
 import com.bookcanvas.domain.quote.repository.QuoteCommentRepository;
 import com.bookcanvas.domain.quote.repository.QuoteLikeRepository;
 import com.bookcanvas.domain.quote.repository.QuoteRepository;
@@ -23,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * 커뮤니티 피드: 구절(글) 작성·조회·수정·삭제, 좋아요, 댓글
@@ -42,7 +47,7 @@ import java.util.stream.Collectors;
  * <pre>
  *   1. 구절 + 작성자 + 도서 (fetch join, LIMIT)   2. 전체 건수
  *   3. 태그 매핑 IN 쿼리 (@BatchSize)            4. 좋아요 수 GROUP BY
- *   5. 댓글 수 GROUP BY                          6. 내가 좋아요한 글 (로그인 시)
+ *   5. 댓글 수 GROUP BY                          6. 내가 좋아요한 글 · 저장한 글 (로그인 시)
  * </pre>
  */
 @Slf4j
@@ -55,6 +60,7 @@ public class QuoteService {
 
     private final QuoteRepository quoteRepository;
     private final QuoteLikeRepository quoteLikeRepository;
+    private final QuoteBookmarkRepository quoteBookmarkRepository;
     private final QuoteCommentRepository quoteCommentRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
@@ -75,19 +81,57 @@ public class QuoteService {
             page = quoteRepository.findByTagIds(tagIds, pageable);
         }
 
-        List<Long> ids = page.getContent().stream().map(Quote::getId).toList();
-        Map<Long, Long> likeCounts = ids.isEmpty() ? Map.of() : toCountMap(quoteLikeRepository.countGroupByQuoteIds(ids));
-        Map<Long, Long> commentCounts = ids.isEmpty() ? Map.of() : toCountMap(quoteCommentRepository.countGroupByQuoteIds(ids));
-        Set<Long> likedIds = (currentUserId == null || ids.isEmpty())
-                ? Set.of()
-                : new HashSet<>(quoteLikeRepository.findLikedQuoteIds(currentUserId, ids));
+        Map<Long, QuoteResponse> byId = toResponseMap(page.getContent(), currentUserId);
+        return PageResponse.from(page.map(q -> byId.get(q.getId())));
+    }
 
-        return PageResponse.from(page.map(q -> QuoteResponse.of(
+    /**
+     * 구절 목록을 응답으로 바꾼다 (좋아요 수 · 댓글 수 · 내가 누른 상태를 목록 크기와 무관한 고정 쿼리로 조회)
+     */
+    private Map<Long, QuoteResponse> toResponseMap(List<Quote> quotes, Long currentUserId) {
+        List<Long> ids = quotes.stream().map(Quote::getId).toList();
+        if (ids.isEmpty()) return Map.of();
+
+        Map<Long, Long> likeCounts = toCountMap(quoteLikeRepository.countGroupByQuoteIds(ids));
+        Map<Long, Long> commentCounts = toCountMap(quoteCommentRepository.countGroupByQuoteIds(ids));
+        Set<Long> likedIds = currentUserId == null ? Set.of() : new HashSet<>(quoteLikeRepository.findLikedQuoteIds(currentUserId, ids));
+        Set<Long> bookmarkedIds = currentUserId == null ? Set.of() : new HashSet<>(quoteBookmarkRepository.findBookmarkedQuoteIds(currentUserId, ids));
+
+        return quotes.stream().collect(Collectors.toMap(Quote::getId, q -> QuoteResponse.of(
                 q,
                 likeCounts.getOrDefault(q.getId(), 0L),
                 commentCounts.getOrDefault(q.getId(), 0L),
                 likedIds.contains(q.getId()),
+                bookmarkedIds.contains(q.getId()),
                 currentUserId)));
+    }
+
+    // ── 내 활동 (프로필: 좋아요 · 저장한 문장) ──
+
+    /** 내가 좋아요한 문장 — 최근에 누른 순 */
+    public PageResponse<QuoteHistoryResponse> getLikedHistory(Long userId, Pageable pageable) {
+        Page<QuoteLike> page = quoteLikeRepository.findMyLikes(userId, pageable);
+        return toHistoryPage(userId, pageable, page.getTotalElements(),
+                page.getContent().stream().map(QuoteLike::getQuote).toList(),
+                page.getContent().stream().map(QuoteLike::getCreatedAt).toList());
+    }
+
+    /** 내가 저장(북마크)한 문장 — 최근에 저장한 순 */
+    public PageResponse<QuoteHistoryResponse> getBookmarkedHistory(Long userId, Pageable pageable) {
+        Page<QuoteBookmark> page = quoteBookmarkRepository.findMyBookmarks(userId, pageable);
+        return toHistoryPage(userId, pageable, page.getTotalElements(),
+                page.getContent().stream().map(QuoteBookmark::getQuote).toList(),
+                page.getContent().stream().map(QuoteBookmark::getCreatedAt).toList());
+    }
+
+    private PageResponse<QuoteHistoryResponse> toHistoryPage(
+            Long userId, Pageable pageable, long total, List<Quote> quotes, List<LocalDateTime> actedAt
+    ) {
+        Map<Long, QuoteResponse> byId = toResponseMap(quotes, userId);
+        List<QuoteHistoryResponse> items = IntStream.range(0, quotes.size())
+                .mapToObj(i -> new QuoteHistoryResponse(byId.get(quotes.get(i).getId()), actedAt.get(i)))
+                .toList();
+        return PageResponse.from(new PageImpl<>(items, pageable, total));
     }
 
     @Transactional
@@ -106,7 +150,7 @@ public class QuoteService {
         quoteRepository.saveAndFlush(quote);
 
         log.info("[Quote] 작성 - userId={}, quoteId={}", userId, quote.getId());
-        return QuoteResponse.of(quote, 0, 0, false, userId);
+        return QuoteResponse.of(quote, 0, 0, false, false, userId);
     }
 
     @Transactional
@@ -126,6 +170,7 @@ public class QuoteService {
                 quoteLikeRepository.countByQuoteId(quoteId),
                 quoteCommentRepository.countByQuoteId(quoteId),
                 quoteLikeRepository.existsByUserIdAndQuoteId(userId, quoteId),
+                quoteBookmarkRepository.existsByUserIdAndQuoteId(userId, quoteId),
                 userId);
     }
 
@@ -134,6 +179,7 @@ public class QuoteService {
         Quote quote = getOwnedQuote(userId, quoteId);
         // 좋아요·댓글은 Quote 와 양방향 관계가 없으므로 먼저 지운다 (FK 제약)
         quoteLikeRepository.deleteAllByQuoteId(quoteId);
+        quoteBookmarkRepository.deleteAllByQuoteId(quoteId);
         quoteCommentRepository.deleteAllByQuoteId(quoteId);
         quoteRepository.delete(quote);
         log.info("[Quote] 삭제 - userId={}, quoteId={}", userId, quoteId);
@@ -160,6 +206,28 @@ public class QuoteService {
         getQuote(quoteId);
         quoteLikeRepository.deleteByUserIdAndQuoteId(userId, quoteId);
         return new CommentDto.LikeResponse(quoteId, false, quoteLikeRepository.countByQuoteId(quoteId));
+    }
+
+    // ── 북마크(저장) — 좋아요와 마찬가지로 멱등하게 ──
+
+    @Transactional
+    public CommentDto.BookmarkResponse bookmark(Long userId, Long quoteId) {
+        Quote quote = getQuote(quoteId);
+        if (!quoteBookmarkRepository.existsByUserIdAndQuoteId(userId, quoteId)) {
+            try {
+                quoteBookmarkRepository.saveAndFlush(new QuoteBookmark(getUser(userId), quote));
+            } catch (DataIntegrityViolationException e) {
+                log.debug("[Quote] 북마크 중복 요청 무시 - userId={}, quoteId={}", userId, quoteId);
+            }
+        }
+        return new CommentDto.BookmarkResponse(quoteId, true);
+    }
+
+    @Transactional
+    public CommentDto.BookmarkResponse unbookmark(Long userId, Long quoteId) {
+        getQuote(quoteId);
+        quoteBookmarkRepository.deleteByUserIdAndQuoteId(userId, quoteId);
+        return new CommentDto.BookmarkResponse(quoteId, false);
     }
 
     // ── 댓글 ──
