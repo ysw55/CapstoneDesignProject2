@@ -17,9 +17,9 @@ DB_PASSWORD: your-mysql-password
 # DB_USERNAME: root
 # DB_URL: jdbc:mysql://localhost:3306/bookcanvas?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&createDatabaseIfNotExist=true
 
-# 도서 검색(+ 버튼 → 책 검색)에 쓰는 카카오 REST API 키 (선택, 비워 두면 직접 입력만 가능)
-#   https://developers.kakao.com/console/app → 앱 만들기 → 앱 → 플랫폼 키 → REST API 키
-# KAKAO_REST_API_KEY: your-kakao-rest-api-key
+# 도서 검색(+ 버튼 → 책 검색)에 쓰는 예스24 Open API Key (선택, 비워 두면 직접 입력만 가능)
+#   https://developers.yes24.com → 로그인 → API Key 신청하기 (즉시 발급, 계정당 1개)
+# YES24_API_KEY: your-yes24-api-key
 
 # JWT 서명 키: Base64 로 인코딩된 32바이트 이상의 무작위 값 (팀원마다 달라도 됨)
 #   PowerShell : [Convert]::ToBase64String((1..32 | % { Get-Random -Max 256 }))

@@ -8,7 +8,7 @@ import { Input } from './FormScreen';
 const DEBOUNCE_MS = 350;
 
 /**
- * 도서 검색 (카카오 책 검색). 입력을 멈추면 자동으로 찾고, 결과를 누르면 onPick 으로 넘긴다.
+ * 도서 검색 (예스24 Open API). 입력을 멈추면 자동으로 찾고, 결과를 누르면 onPick 으로 넘긴다.
  * 검색을 쓸 수 없으면(키 없음·네트워크 오류) 안내만 하고 아래 직접 입력으로 이어지게 한다.
  */
 export default function BookSearch({ onPick }) {
@@ -74,6 +74,7 @@ export default function BookSearch({ onPick }) {
         )}
       </InputWrap>
 
+      {status === 'done' && results.length > 0 && <Source>도서 정보 제공: 예스24</Source>}
       {status === 'unavailable' && <Note>도서 검색을 지금은 쓸 수 없어요. 아래에 직접 입력해 주세요.</Note>}
       {status === 'done' && results.length === 0 && <Note>검색 결과가 없어요. 아래에 직접 입력할 수도 있어요.</Note>}
 
@@ -83,6 +84,7 @@ export default function BookSearch({ onPick }) {
             <li key={`${book.isbn ?? book.title}-${i}`}>
               <Result type="button" onClick={() => pick(book)}>
                 <BookCover title={book.title} author={book.author} color="#E9ECEF" size="sm" imageUrl={book.coverImageUrl} />
+                {book.spineImageUrl && <SpineThumb src={book.spineImageUrl} alt="" loading="lazy" />}
                 <Text>
                   <strong>{book.title}</strong>
                   <span>
@@ -158,6 +160,11 @@ const Note = styled.p`
   color: ${({ theme }) => theme.colors.textSecondary};
 `;
 
+const Source = styled.p`
+  font-size: 11.5px;
+  color: ${({ theme }) => theme.colors.textTertiary};
+`;
+
 const Results = styled.ul`
   max-height: 340px;
   overflow-y: auto;
@@ -182,6 +189,16 @@ const Result = styled.button`
   &:active {
     background: ${({ theme }) => theme.colors.surfaceMuted};
   }
+`;
+
+/* 이 책이 책장에서 어떤 책등으로 보일지 미리 보여 준다 */
+const SpineThumb = styled.img`
+  flex-shrink: 0;
+  height: 60px;
+  width: auto;
+  max-width: 28px;
+  border-radius: 2px;
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.2);
 `;
 
 const Text = styled.span`

@@ -104,18 +104,20 @@ openssl rand -base64 32
 
 ### 4. 도서 검색 키 (선택)
 
-책 추가 화면(`+` 버튼)의 **책 검색**은 [카카오 책 검색 API](https://developers.kakao.com/docs/ko/daum-search/dev-guide)를 씁니다.
+책 추가 화면(`+` 버튼)의 **책 검색**은 [예스24 Open API](https://developers.yes24.com)를 씁니다. 검색한 책은 **앞표지 · 책등 이미지**와 예스24 상품 링크가 함께 저장됩니다.
 키가 없으면 검색만 꺼지고 **직접 입력**은 그대로 됩니다.
 
-1. [카카오 디벨로퍼스 콘솔](https://developers.kakao.com/console/app)에 카카오 계정으로 로그인 → 앱 만들기 (메뉴 이름은 "내 애플리케이션 → 애플리케이션 추가하기" 또는 "앱 → 앱 생성"으로 보입니다)
-2. 만든 앱을 열어 **앱 → 플랫폼 키 → REST API 키** (예전 화면은 "앱 설정 → 요약 정보") 에서 키 복사
-3. `application-local.yml` 에 한 줄 추가 (또는 환경 변수 `KAKAO_REST_API_KEY`)
+1. [예스24 개발자센터](https://developers.yes24.com)에서 예스24 계정으로 로그인 → **API Key 신청하기** (즉시 발급, 계정당 1개)
+2. `application-local.yml` 에 한 줄 추가 (또는 환경 변수 `YES24_API_KEY`)
 
 ```yaml
-KAKAO_REST_API_KEY: 복사한-REST-API-키
+YES24_API_KEY: 발급받은-API-Key
 ```
 
 서버를 다시 실행하면 적용됩니다.
+
+> **예스24 이용 조건** ([FAQ](https://developers.yes24.com/support/faq)): 책 정보가 보이는 화면에 **예스24 출처 표기**와 **예스24 상품 페이지 링크**를 둬야 하고(검색 결과·책 상세에 반영돼 있습니다),
+> API Key 는 서버에서만 호출하며(브라우저에 노출하지 않음), 전체 도서 정보를 모아 자체 DB 로 축적하거나 재배포하면 안 됩니다. 이 앱은 사용자가 고른 책만 저장합니다.
 
 ---
 
@@ -199,7 +201,7 @@ DROP DATABASE bookcanvas;
 | POST | `/api/auth/password` | 비밀번호 변경 | JWT |
 | GET | `/api/books/completions` | 내 책장 | JWT |
 | POST / PUT / DELETE | `/api/books/completions[/{id}]` | 책장 추가 · 수정 · 삭제 | JWT |
-| GET | `/api/books/search?q=&page=` | 도서 검색 (카카오, 10권씩). 키가 없으면 503 `BOOK_SEARCH_UNAVAILABLE` | JWT |
+| GET | `/api/books/search?q=&page=` | 도서 검색 (예스24 국내도서, 10권씩). 키가 없으면 503 `BOOK_SEARCH_UNAVAILABLE` | JWT |
 | GET / POST | `/api/books/shelves` | 책장 목록 · 책장 만들기 (최대 5개, 이름 비우면 "책장 N") | JWT |
 | PUT / DELETE | `/api/books/shelves/{id}` | 책장 이름 바꾸기 · 삭제 (책은 첫 번째 책장으로 이동, 마지막 책장은 삭제 불가) | JWT |
 | PUT | `/api/books/completions/{id}/shelf` | 책을 다른 책장으로 옮기기 `{ "shelfId": 2 }` | JWT |

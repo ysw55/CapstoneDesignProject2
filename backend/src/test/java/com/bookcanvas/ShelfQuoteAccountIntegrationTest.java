@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -15,6 +16,13 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+
+import com.bookcanvas.domain.book.service.BookCoverColorExtractorService;
+import com.bookcanvas.domain.book.service.BookCoverColorExtractorService.CoverPalette;
+
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.when;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -25,8 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 내 책장 동기화 · 커뮤니티 피드 · 비밀번호 변경 · 시연용 간편 로그인 통합 테스트 (H2)
  */
-// 개발자 PC 의 application-local.yml 에 카카오 키가 있어도 '키 없음' 상태로 테스트한다
-@SpringBootTest(properties = "app.book-search.kakao-rest-api-key=")
+// 개발자 PC 의 application-local.yml 에 예스24 키가 있어도 '키 없음' 상태로 테스트한다
+@SpringBootTest(properties = "app.book-search.yes24-api-key=")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
@@ -34,6 +42,8 @@ class ShelfQuoteAccountIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
+    // 실제 표지 서버를 부르지 않도록 가짜로 바꾼다
+    @MockBean BookCoverColorExtractorService colorExtractor;
 
     private static final String REVIEW = "다".repeat(210);
 
@@ -245,18 +255,68 @@ class ShelfQuoteAccountIntegrationTest {
         Map<String, Object> picked = new java.util.HashMap<>(shelfBook("데미안", "2026-10-01"));
         picked.put("isbn", "9788937460777");
         picked.put("publisher", "민음사");
-        picked.put("coverImageUrl", "https://search1.kakaocdn.net/thumb/cover.jpg");
+        picked.put("coverImageUrl", "https://image.yes24.com/goods/1/L");
+        picked.put("spineImageUrl", "https://image.yes24.com/goods/1/SIDE/L");
+        picked.put("productUrl", "https://www.yes24.com/product/goods/1");
         call(HttpMethod.POST, "/api/books/completions", picked, token)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.book.coverImageUrl").value("https://search1.kakaocdn.net/thumb/cover.jpg"));
+                .andExpect(jsonPath("$.book.coverImageUrl").value("https://image.yes24.com/goods/1/L"))
+                .andExpect(jsonPath("$.spineImageUrl").value("https://image.yes24.com/goods/1/SIDE/L"))
+                .andExpect(jsonPath("$.productUrl").value("https://www.yes24.com/product/goods/1"));
+
+        // 색을 고르지 않고 표지가 있으면 대표 색이 책등 가운데 색이 되고, 대표 색 3가지가 함께 내려간다
+        CoverPalette palette = new CoverPalette("#336699", java.util.List.of("#336699", "#F2E8CF", "#C0392B"));
+        when(colorExtractor.extractPalette(anyString())).thenReturn(palette);
+        Map<String, Object> auto = new java.util.HashMap<>(shelfBook("미움받을 용기", "2026-10-03"));
+        auto.remove("coverColor");
+        auto.put("isbn", "9788996991342");
+        auto.put("coverImageUrl", "https://search1.kakaocdn.net/thumb/auto.jpg");
+        call(HttpMethod.POST, "/api/books/completions", auto, token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.coverColor").value("#336699"))
+                .andExpect(jsonPath("$.paletteColors.length()").value(3))
+                .andExpect(jsonPath("$.paletteColors[1]").value("#F2E8CF"));
+
+        // 추출에 실패해도 책 추가는 되고 기본 색(딥그린), 3단 꾸밈 없음
+        when(colorExtractor.extractPalette(anyString()))
+                .thenThrow(new BookCoverColorExtractorService.ColorExtractionException("실패"));
+        Map<String, Object> failing = new java.util.HashMap<>(shelfBook("한강", "2026-10-04"));
+        failing.remove("coverColor");
+        failing.put("isbn", "9788996991999");
+        failing.put("coverImageUrl", "https://search1.kakaocdn.net/thumb/fail.jpg");
+        call(HttpMethod.POST, "/api/books/completions", failing, token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.coverColor").value("#1B4D3E"))
+                .andExpect(jsonPath("$.paletteColors").isEmpty());
+
+        // 색이 없는 책은 책장을 불러올 때 채워진다 (이제 표지를 읽을 수 있다고 가정)
+        doReturn(palette).when(colorExtractor).extractPalette(anyString());
+        for (JsonNode b : json(call(HttpMethod.GET, "/api/books/completions", null, token))) {
+            if (b.get("book").get("title").asText().equals("한강")) {
+                assertThat(b.get("paletteColors").size()).isEqualTo(3);
+            }
+        }
+
+        // 직접 고른 색이 있으면 표지 대표 색으로 덮지 않고 그 색을 쓴다 (3가지는 그대로 내려간다)
+        Map<String, Object> chosen = new java.util.HashMap<>(shelfBook("채식주의자", "2026-10-05"));
+        chosen.put("isbn", "9788996991888");
+        chosen.put("coverImageUrl", "https://search1.kakaocdn.net/thumb/chosen.jpg");
+        call(HttpMethod.POST, "/api/books/completions", chosen, token)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.coverColor").value("#212529"))
+                .andExpect(jsonPath("$.paletteColors.length()").value(3));
 
         // 카카오 이미지 서버가 아닌 표지 주소는 서버가 나중에 내려받지 않도록 버린다
         Map<String, Object> sneaky = new java.util.HashMap<>(shelfBook("모모", "2026-10-02"));
         sneaky.put("isbn", "9788937460111");
         sneaky.put("coverImageUrl", "http://169.254.169.254/latest/meta-data");
+        sneaky.put("spineImageUrl", "https://evil.example.com/spine.png");
+        sneaky.put("productUrl", "https://evil.example.com/yes24");
         call(HttpMethod.POST, "/api/books/completions", sneaky, token)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.book.coverImageUrl").doesNotExist());
+                .andExpect(jsonPath("$.book.coverImageUrl").doesNotExist())
+                .andExpect(jsonPath("$.spineImageUrl").doesNotExist())
+                .andExpect(jsonPath("$.productUrl").doesNotExist());
     }
 
     @Test

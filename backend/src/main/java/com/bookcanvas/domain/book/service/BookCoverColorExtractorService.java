@@ -8,8 +8,12 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URI;
+import java.io.InputStream;
 import java.net.URL;
+import java.net.URLConnection;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -44,6 +48,14 @@ public class BookCoverColorExtractorService {
      */
     private static final int QUANTIZE_BITS = 4;
 
+    /** 표지 대표 색 개수, 서로 다른 색으로 볼 최소 RGB 거리 */
+    private static final int PALETTE_SIZE = 3;
+    private static final double MIN_PALETTE_DISTANCE = 60;
+
+    /** 표지 서버가 느리거나 멈춰도 책 추가·완독 인증 요청이 오래 붙잡히지 않도록 */
+    private static final int CONNECT_TIMEOUT_MS = 3_000;
+    private static final int READ_TIMEOUT_MS = 5_000;
+
     /** 배경색 판별 임계값. 이 비율 이상이면 배경 색상으로 간주하여 제외합니다. */
     private static final double BACKGROUND_THRESHOLD_RATIO = 0.5;
 
@@ -65,6 +77,66 @@ public class BookCoverColorExtractorService {
 
         log.info("[ColorExtractor] 색상 추출 완료 - 결과: {}", hexColor);
         return hexColor;
+    }
+
+    /**
+     * 표지 이미지를 한 번만 내려받아 책등에 쓸 색을 함께 뽑는다.
+     *
+     * @return 대표 색(가장 큰 색)과 표지 전체의 대표 색 3가지 (첫 번째가 대표 색)
+     */
+    public CoverPalette extractPalette(String imageUrl) {
+        log.info("[ColorExtractor] 책등 색 추출 시작 - URL: {}", imageUrl);
+        BufferedImage resized = resizeImage(loadImage(imageUrl), SAMPLE_SIZE, SAMPLE_SIZE);
+        int primary = findDominantColor(resized);
+        return new CoverPalette(toHexCode(primary), topColors(resized, primary));
+    }
+
+    /** 책등 색 묶음: 대표 색 + 표지 전체의 대표 색 {@value #PALETTE_SIZE}가지(첫 번째가 대표 색) */
+    public record CoverPalette(String primaryColorHex, List<String> colors) {}
+
+    /**
+     * 이미지에서 서로 다른 대표 색을 최대 {@value #PALETTE_SIZE}개 뽑는다.
+     * 첫 색은 {@code primaryRgb}(무채색 배경을 피해 고른 대표 색)로 두고, 나머지는 많이 나온 순으로
+     * 이미 고른 색과 비슷하지 않은 색을 채운다.
+     */
+    List<String> topColors(BufferedImage image, int primaryRgb) {
+        int mask = 0xFF & (0xFF << QUANTIZE_BITS);
+
+        // 양자화한 색 버킷마다 [개수, R합, G합, B합] — 버킷 안의 실제 평균 색을 쓰기 위해
+        Map<Integer, long[]> buckets = new HashMap<>();
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int argb = image.getRGB(x, y);
+                if (((argb >> 24) & 0xFF) == 0) continue;
+                int r = (argb >> 16) & 0xFF;
+                int g = (argb >> 8) & 0xFF;
+                int b = argb & 0xFF;
+                long[] bucket = buckets.computeIfAbsent((r & mask) << 16 | (g & mask) << 8 | (b & mask), k -> new long[4]);
+                bucket[0]++;
+                bucket[1] += r;
+                bucket[2] += g;
+                bucket[3] += b;
+            }
+        }
+
+        List<int[]> picked = new ArrayList<>();
+        picked.add(new int[]{(primaryRgb >> 16) & 0xFF, (primaryRgb >> 8) & 0xFF, primaryRgb & 0xFF});
+        buckets.values().stream()
+                .sorted((a, b) -> Long.compare(b[0], a[0]))
+                .forEach(bucket -> {
+                    if (picked.size() >= PALETTE_SIZE) return;
+                    int[] mean = {(int) (bucket[1] / bucket[0]), (int) (bucket[2] / bucket[0]), (int) (bucket[3] / bucket[0])};
+                    if (picked.stream().noneMatch(p -> colorDistance(p, mean) < MIN_PALETTE_DISTANCE)) picked.add(mean);
+                });
+
+        List<String> hex = new ArrayList<>();
+        for (int[] c : picked) hex.add(toHexCode((c[0] << 16) | (c[1] << 8) | c[2]));
+        return hex;
+    }
+
+    private static double colorDistance(int[] a, int[] b) {
+        int dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+        return Math.sqrt(dr * dr + dg * dg + db * db);
     }
 
     /**
@@ -96,8 +168,14 @@ public class BookCoverColorExtractorService {
     private BufferedImage loadImage(String imageUrl) {
         try {
             URL url = URI.create(imageUrl).toURL();
+            URLConnection connection = url.openConnection();
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
             // ImageIO.read()는 JPEG, PNG, GIF, BMP, WBMP 포맷을 기본 지원합니다.
-            BufferedImage image = ImageIO.read(url);
+            BufferedImage image;
+            try (InputStream in = connection.getInputStream()) {
+                image = ImageIO.read(in);
+            }
             if (image == null) {
                 throw new ColorExtractionException("이미지를 읽을 수 없습니다. URL을 확인하거나 지원하는 포맷(JPEG, PNG, GIF)인지 확인하세요: " + imageUrl);
             }

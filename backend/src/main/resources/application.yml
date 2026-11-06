@@ -47,10 +47,10 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
 
-  # ── 도서 검색 (카카오 책 검색 API) ──
+  # ── 도서 검색 (예스24 Open API) ──
   book-search:
-    # https://developers.kakao.com → 내 애플리케이션 → REST API 키. 비어 있으면 검색이 꺼지고 직접 입력만 가능
-    kakao-rest-api-key: ${KAKAO_REST_API_KEY:}
+    # https://developers.yes24.com 에서 로그인 후 API Key 신청(즉시 발급). 비어 있으면 검색이 꺼지고 직접 입력만 가능
+    yes24-api-key: ${YES24_API_KEY:}
 
   # ── 캡스톤 시연용 ──
   demo:

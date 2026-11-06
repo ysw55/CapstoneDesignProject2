@@ -53,7 +53,13 @@ function BookForm({ editing }) {
   const handlePick = (book) => {
     setError(null);
     setForm((f) => ({ ...f, title: book.title, author: book.author ?? '' }));
-    setPicked({ isbn: book.isbn, publisher: book.publisher, coverImageUrl: book.coverImageUrl });
+    setPicked({
+      isbn: book.isbn,
+      publisher: book.publisher,
+      coverImageUrl: book.coverImageUrl,
+      spineImageUrl: book.spineImageUrl,
+      productUrl: book.productUrl,
+    });
   };
   const today = todayISO();
   const canSubmit = form.title.trim() && form.author.trim() && form.completedAt && form.completedAt <= today;
@@ -65,7 +71,8 @@ function BookForm({ editing }) {
       ...form,
       title: form.title.trim(),
       author: form.author.trim(),
-      coverColor: form.coverColor || pickCoverColor(books), // 고르지 않았으면 자동 선택
+      // 고르지 않았으면 자동 선택. 검색으로 고른 책(표지 있음)은 비워 보내 서버가 표지의 대표 색을 쓰게 한다
+      coverColor: form.coverColor || (!isEdit && picked?.coverImageUrl ? null : pickCoverColor(books)),
       ...(!isEdit && picked), // 검색으로 고른 책이면 ISBN · 출판사 · 표지도 함께 저장
     };
     try {
@@ -138,7 +145,14 @@ function BookForm({ editing }) {
       </Field>
 
       <Field as="fieldset">
-        <Label as="legend">표지 색상</Label>
+        <Label as="legend">책등 색상</Label>
+        {!isEdit && picked?.coverImageUrl && !form.coverColor && (
+          <AutoColorNote>
+            {picked.spineImageUrl
+              ? '예스24 책등 이미지를 책장에 보여 드려요'
+              : '고르지 않으면 표지에서 색을 자동으로 가져와 책등을 꾸며요'}
+          </AutoColorNote>
+        )}
         <Swatches>
           {COVER_PALETTE.map((color) => {
             const selected = form.coverColor === color;
@@ -202,6 +216,12 @@ const CertifyLink = styled.button`
   &:active {
     transform: scale(0.97);
   }
+`;
+
+const AutoColorNote = styled.p`
+  margin-bottom: ${({ theme }) => theme.space(2)};
+  font-size: 12.5px;
+  color: ${({ theme }) => theme.colors.accent};
 `;
 
 const Swatches = styled.div`
