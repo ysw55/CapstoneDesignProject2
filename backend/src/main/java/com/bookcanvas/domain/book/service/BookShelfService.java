@@ -5,6 +5,7 @@ import com.bookcanvas.domain.book.dto.ShelfBookResponseDto;
 import com.bookcanvas.domain.book.entity.Book;
 import com.bookcanvas.domain.book.entity.BookCompletion;
 import com.bookcanvas.domain.book.entity.Bookshelf;
+import com.bookcanvas.domain.book.service.BookCoverColorExtractorService.CoverPalette;
 import com.bookcanvas.domain.book.repository.BookCompletionRepository;
 import com.bookcanvas.domain.user.entity.User;
 import com.bookcanvas.domain.user.repository.UserRepository;
@@ -17,9 +18,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -39,14 +45,18 @@ public class BookShelfService {
     private final UserRepository userRepository;
     private final BookFinder bookFinder;
     private final BookshelvesService bookshelvesService;
+    private final BookCoverColorExtractorService colorExtractor;
+
+    private static final int BACKFILL_LIMIT = 8;
+    private static final long BACKFILL_TIMEOUT_SECONDS = 6;
 
     /** 로그인 사용자의 책 전체 — 모든 책장과 보관함 (직접 정한 순서, 없으면 최근 완독 순) */
     @Transactional // 책장이 정해지지 않은 책을 첫 번째 책장에 채워 넣기 때문에 쓰기 트랜잭션
     public List<ShelfBookResponseDto> getMyShelf(Long userId) {
         bookshelvesService.ensureDefaultShelf(userId);
-        return bookCompletionRepository.findShelfByUserId(userId).stream()
-                .map(ShelfBookResponseDto::from)
-                .toList();
+        List<BookCompletion> shelf = bookCompletionRepository.findShelfByUserId(userId);
+        backfillCoverPalettes(shelf);
+        return shelf.stream().map(ShelfBookResponseDto::from).toList();
     }
 
     @Transactional
@@ -54,7 +64,10 @@ public class BookShelfService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         String coverUrl = BookSearchService.isTrustedCoverUrl(request.coverImageUrl()) ? request.coverImageUrl().trim() : null;
+        String spineUrl = BookSearchService.isTrustedCoverUrl(request.spineImageUrl()) ? request.spineImageUrl().trim() : null;
+        String productUrl = BookSearchService.isTrustedProductUrl(request.productUrl()) ? request.productUrl().trim() : null;
         Book book = bookFinder.findOrCreate(request.title(), request.author(), request.isbn(), request.publisher(), coverUrl);
+        book.attachYes24Info(spineUrl, productUrl);
         Bookshelf shelf = request.shelfId() == null
                 ? bookshelvesService.ensureDefaultShelf(userId)
                 : bookshelvesService.findOwned(userId, request.shelfId());
@@ -64,12 +77,24 @@ public class BookShelfService {
             throw new BusinessException(existing.get().isArchived() ? ErrorCode.ALREADY_ARCHIVED : ErrorCode.ALREADY_ON_SHELF);
         }
 
+        // 표지가 있으면 한 번만 내려받아 책등 색(대표 색 + 대표 색 3가지)을 뽑는다
+        CoverPalette palette = null;
+        // 책등 이미지가 있으면 색 블록은 필요 없으므로 표지를 내려받지 않는다
+        if (coverUrl != null && book.getSpineImageUrl() == null
+                && (request.coverColor() == null || !book.hasCoverPaletteResolved())) {
+            palette = extractPalette(coverUrl);
+        }
+        if (palette != null && !book.hasCoverPaletteResolved()) {
+            book.changeCoverPalette(palette.colors());
+        }
+
         BookCompletion entry = BookCompletion.builder()
                 .user(user)
                 .book(book)
                 .shelf(shelf)
                 .completedAt(request.completedAt())
-                .coverColor(request.coverColor())
+                // 색을 고르지 않았고 표지가 있으면 표지의 대표 색을 책등 가운데 색으로 쓴다
+                .coverColor(request.coverColor() != null ? request.coverColor() : (palette != null ? palette.primaryColorHex() : null))
                 .build();
         saveAndFlush(entry);
 
@@ -161,6 +186,55 @@ public class BookShelfService {
     }
 
     // =========================================================================
+
+    /** 표지에서 책등 색을 뽑는다. 실패해도 책 추가는 되어야 하므로 null(= 기본 색, 3단 꾸밈 없음)로 넘어간다 */
+    private CoverPalette extractPalette(String coverUrl) {
+        try {
+            return colorExtractor.extractPalette(coverUrl);
+        } catch (BookCoverColorExtractorService.ColorExtractionException e) {
+            log.warn("[Shelf] 표지 색 추출 실패, 기본 색 사용 - {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 표지 대표 색이 아직 없는 책(기능 추가 전에 꽂은 책)을 채운다.
+     *
+     * <p>표지를 병렬로 내려받고, 한 번에 {@value #BACKFILL_LIMIT}권·{@value #BACKFILL_TIMEOUT_SECONDS}초까지만 기다린다.
+     * 시간 안에 끝나지 못한 책은 다음 조회 때 이어서 채우고, 읽을 수 없는 표지는 빈 목록으로 기록해 다시 시도하지 않는다.
+     */
+    private void backfillCoverPalettes(List<BookCompletion> completions) {
+        Map<Long, Book> targets = new LinkedHashMap<>();
+        for (BookCompletion c : completions) {
+            Book book = c.getBook();
+            if (!book.hasCoverPaletteResolved() && book.getSpineImageUrl() == null
+                    && BookSearchService.isTrustedCoverUrl(book.getCoverImageUrl())) {
+                targets.putIfAbsent(book.getId(), book);
+                if (targets.size() >= BACKFILL_LIMIT) break;
+            }
+        }
+        if (targets.isEmpty()) return;
+
+        Map<Long, CompletableFuture<CoverPalette>> futures = new LinkedHashMap<>();
+        targets.forEach((id, book) -> futures.put(id,
+                CompletableFuture.supplyAsync(() -> colorExtractor.extractPalette(book.getCoverImageUrl()))));
+
+        try {
+            CompletableFuture.allOf(futures.values().toArray(CompletableFuture[]::new))
+                    .get(BACKFILL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException e) {
+            // 일부가 실패하거나 늦어도 아래에서 책별로 처리한다
+        }
+
+        targets.forEach((id, book) -> {
+            CompletableFuture<CoverPalette> future = futures.get(id);
+            if (!future.isDone()) return; // 시간 초과 — 다음 조회 때 다시
+            CoverPalette palette = future.isCompletedExceptionally() ? null : future.join();
+            book.changeCoverPalette(palette == null ? List.of() : palette.colors());
+        });
+    }
 
     /** 남의 책장 항목은 '없는 것'으로 응답 (존재 여부도 노출하지 않음) */
     private BookCompletion findOwned(Long userId, Long completionId) {

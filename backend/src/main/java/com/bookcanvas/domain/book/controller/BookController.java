@@ -6,8 +6,10 @@ import com.bookcanvas.domain.book.dto.ShelfBookRequestDto;
 import com.bookcanvas.domain.book.dto.ShelfBookResponseDto;
 import com.bookcanvas.domain.book.dto.ShelfMoveRequestDto;
 import com.bookcanvas.domain.book.dto.ShelfOrderRequestDto;
+import com.bookcanvas.domain.book.dto.Yes24LinkResultDto;
 import com.bookcanvas.domain.book.service.BookCompletionService;
 import com.bookcanvas.domain.book.service.BookShelfService;
+import com.bookcanvas.domain.book.service.BookYes24LinkService;
 import com.bookcanvas.domain.book.service.BookshelvesService;
 import com.bookcanvas.global.security.AuthUser;
 import jakarta.validation.Valid;
@@ -26,6 +28,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code GET    /completions}       내 책장(완독 기록) 전체 — {@code certified} 로 ✓ 배지 표시</li>
  *   <li>{@code POST   /completions}       책장에 추가 (독후감 없이, 보상 없음)</li>
+ *   <li>{@code POST   /completions/link-yes24}   기존 책을 예스24 책 정보(표지·책등·링크)로 한꺼번에 연결</li>
  *   <li>{@code PUT    /completions/{id}/shelf}   다른 책장으로 옮기기</li>
  *   <li>{@code POST   /completions/{id}/archive} 보관함으로 옮기기 (인증한 책도 가능)</li>
  *   <li>{@code DELETE /completions/{id}/archive?shelfId=} 보관함에서 책장으로 꺼내기 (shelfId 를 비우면 원래 책장)</li>
@@ -43,6 +46,7 @@ public class BookController {
     private final BookCompletionService bookCompletionService;
     private final BookShelfService bookShelfService;
     private final BookshelvesService bookshelvesService;
+    private final BookYes24LinkService bookYes24LinkService;
 
     @GetMapping("/completions")
     public ResponseEntity<List<ShelfBookResponseDto>> getMyShelf(@AuthenticationPrincipal AuthUser authUser) {
@@ -55,6 +59,11 @@ public class BookController {
             @Valid @RequestBody ShelfBookRequestDto request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(bookShelfService.addBook(authUser.userId(), request));
+    }
+
+    @PostMapping("/completions/link-yes24")
+    public ResponseEntity<Yes24LinkResultDto> linkYes24(@AuthenticationPrincipal AuthUser authUser) {
+        return ResponseEntity.ok(bookYes24LinkService.linkMyBooks(authUser.userId()));
     }
 
     @PutMapping("/completions/order")

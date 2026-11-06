@@ -17,6 +17,8 @@ import {
   ArrowRightLeft,
   BadgeCheck,
   ChevronRight,
+  ExternalLink,
+  Link2,
   LibraryBig,
   LockKeyhole,
   Pencil,
@@ -31,7 +33,7 @@ import Button from '../components/common/Button';
 import Toast from '../components/common/Toast';
 import { BottomSheet, ConfirmDialog } from '../components/common/Modal';
 import BookCover from '../components/book/BookCover';
-import BookSpine from '../components/book/BookSpine';
+import BookSpine, { spineWeight } from '../components/book/BookSpine';
 import ShelfOrnament from '../components/book/ShelfOrnament';
 import LoadingScreen from '../components/common/LoadingScreen';
 import { Input } from '../components/form/FormScreen';
@@ -44,7 +46,7 @@ import { formatDate, todayISO } from '../utils/format';
 const SPINE_VIEW = true;
 
 // 표지 진열은 한 칸에 3권, 책등은 얇아서 7권
-const BOOKS_PER_SHELF = SPINE_VIEW ? 7 : 3;
+const BOOKS_PER_SHELF = SPINE_VIEW ? 10 : 3;
 
 // [a,b,c,d,e,f] → [[a,b,c],[d,e,f]] : 한 칸(선반)에 BOOKS_PER_SHELF 권씩
 const toShelves = (books) =>
@@ -53,12 +55,14 @@ const toShelves = (books) =>
   );
 
 /** 편집 모드에서 끌어서 옮길 수 있는 칸. 움직이는 건 이 바깥 칸이라 BookSlot 의 등장 애니메이션과 겹치지 않는다 */
-function SortableItem({ id, disabled, children }) {
+function SortableItem({ id, disabled, weight, fill, children }) {
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id, disabled });
   return (
     <SortableCell
       ref={setNodeRef}
       $dragging={isDragging}
+      $weight={weight}
+      $fill={fill}
       style={{ transform: CSS.Translate.toString(transform), transition }}
     >
       {children(disabled ? {} : { ...attributes, ...listeners })}
@@ -87,6 +91,7 @@ export default function BookshelfPage() {
     renameShelf,
     deleteShelf,
     moveBook,
+    linkYes24,
   } = useAppData();
   const { status: authStatus, openLogin } = useAuth();
   const [editMode, setEditMode] = useState(false);
@@ -97,6 +102,7 @@ export default function BookshelfPage() {
   const [renameValue, setRenameValue] = useState('');
   const [shelfDeleteTarget, setShelfDeleteTarget] = useState(null);
   const [moveTarget, setMoveTarget] = useState(null); // 다른 책장으로 옮길 책
+  const [linking, setLinking] = useState(false); // 예스24 연결 중
   const [unarchiveTarget, setUnarchiveTarget] = useState(null); // 보관함에서 꺼낼 책 (꽂을 책장을 고르는 중)
   const [toast, showToast] = useFlashToast(clearHighlight);
 
@@ -173,6 +179,23 @@ export default function BookshelfPage() {
       showToast(`${shelf?.name ?? '책장'}에 다시 꽂았어요`);
     } catch (err) {
       showToast(err.message);
+    }
+  };
+
+  const yes24PendingCount = myBooks.filter((b) => b.yes24Pending).length;
+
+  const handleLinkYes24 = async () => {
+    setLinking(true);
+    try {
+      const r = await linkYes24();
+      const parts = [`${r.linked}권을 예스24 책 정보로 연결했어요`];
+      if (r.notFound > 0) parts.push(`${r.notFound}권은 예스24에서 찾지 못했어요`);
+      if (r.remaining > 0) parts.push(r.stopped ? `예스24 연결이 잠시 막혀 ${r.remaining}권이 남았어요. 잠시 뒤 다시 눌러 주세요` : `${r.remaining}권이 남았어요. 한 번 더 눌러 주세요`);
+      showToast(parts.join(' · '));
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setLinking(false);
     }
   };
 
@@ -313,14 +336,29 @@ export default function BookshelfPage() {
               책을 끌어서 순서를 바꾸고, 버튼으로 수정하거나 뺄 수 있어요 · 인증한 책은 삭제 대신 보관함으로 옮길 수 있어요
             </EditHint>
           ) : (
-            <CertifyBanner type="button" onClick={() => navigate('/books/certify')}>
-              <BadgeCheck size={22} strokeWidth={2} aria-hidden />
-              <span>
-                <strong>완독 인증하고 보상 받기</strong>
-                독후감 200자 · 인증 {certifiedCount}/{myBooks.length}권
-              </span>
-              <ChevronRight size={20} strokeWidth={2} aria-hidden />
-            </CertifyBanner>
+            <>
+              <CertifyBanner type="button" onClick={() => navigate('/books/certify')}>
+                <BadgeCheck size={22} strokeWidth={2} aria-hidden />
+                <span>
+                  <strong>완독 인증하고 보상 받기</strong>
+                  독후감 200자 · 인증 {certifiedCount}/{myBooks.length}권
+                </span>
+                <ChevronRight size={20} strokeWidth={2} aria-hidden />
+              </CertifyBanner>
+
+              {yes24PendingCount > 0 && (
+                <Yes24Banner>
+                  <Link2 size={20} strokeWidth={2} aria-hidden />
+                  <span>
+                    <strong>{yes24PendingCount}권을 예스24 책 정보로 연결할 수 있어요</strong>
+                    실제 책등과 표지로 책장이 바뀌어요
+                  </span>
+                  <Yes24Button type="button" disabled={linking} onClick={handleLinkYes24}>
+                    {linking ? '연결 중…' : '연결하기'}
+                  </Yes24Button>
+                </Yes24Banner>
+              )}
+            </>
           )}
 
           <ViewTabs role="tablist">
@@ -456,7 +494,7 @@ export default function BookshelfPage() {
                       <Shelf key={shelf[0].id}>
                         <BookRow $spine={SPINE_VIEW}>
                           {shelf.map((book) => (
-                            <SortableItem key={book.id} id={book.id} disabled={!editMode}>
+                            <SortableItem key={book.id} id={book.id} disabled={!editMode} weight={SPINE_VIEW ? spineWeight(book.id) : undefined} fill={shelf.length >= BOOKS_PER_SHELF}>
                               {(dragProps) => (
                                 <BookSlot
                                   $new={book.id === highlightBookId}
@@ -483,6 +521,8 @@ export default function BookshelfPage() {
                                           title={book.title}
                                           author={book.author}
                                           color={book.coverColor}
+                                          paletteColors={book.paletteColors}
+                                          spineImageUrl={book.spineImageUrl}
                                           seed={book.id}
                                           certified={book.certified}
                                         />
@@ -593,6 +633,14 @@ export default function BookshelfPage() {
                   )}
                 </dd>
               </DetailRows>
+              {detailBook.productUrl && (
+                <DetailSource>
+                  <a href={detailBook.productUrl} target="_blank" rel="noopener noreferrer">
+                    예스24에서 보기 <ExternalLink size={12} strokeWidth={2.2} aria-hidden />
+                  </a>
+                  <span>도서 정보 제공: 예스24</span>
+                </DetailSource>
+              )}
             </DetailInfo>
           </Detail>
         )}
@@ -760,6 +808,26 @@ const DetailAuthor = styled.p`
   margin-top: 2px;
   font-size: ${({ theme }) => theme.fontSize.sm};
   color: ${({ theme }) => theme.colors.textSecondary};
+`;
+
+const DetailSource = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: ${({ theme }) => theme.space(3)};
+  font-size: 12px;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-weight: 700;
+    color: ${({ theme }) => theme.colors.accent};
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.textTertiary};
+  }
 `;
 
 const DetailRows = styled.dl`
@@ -1060,6 +1128,57 @@ const ArchiveRestoreButton = styled.button`
   }
 `;
 
+/* 기존 책을 예스24 책 정보로 연결하자는 안내 (인증 배너 아래) */
+const Yes24Banner = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.space(3)};
+  margin: -12px ${({ theme }) => theme.layout.gutter} ${({ theme }) => theme.space(6)};
+  padding: 12px 14px;
+  border-radius: ${({ theme }) => theme.radius.lg};
+  background: ${({ theme }) => theme.colors.accentSoft};
+
+  > svg:first-child {
+    flex-shrink: 0;
+    color: ${({ theme }) => theme.colors.accent};
+  }
+
+  span {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: ${({ theme }) => theme.colors.textSecondary};
+  }
+
+  strong {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: ${({ theme }) => theme.colors.textPrimary};
+  }
+`;
+
+const Yes24Button = styled.button`
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: ${({ theme }) => theme.radius.pill};
+  font-size: 13px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.onAccent};
+  background: ${({ theme }) => theme.colors.accent};
+  transition: transform ${({ theme }) => theme.motion.fast};
+
+  &:active:not(:disabled) {
+    transform: scale(0.94);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+`;
+
 const CertifyBanner = styled.button`
   display: flex;
   align-items: center;
@@ -1340,8 +1459,9 @@ const BookRow = styled.div`
       ? css`
           display: flex;
           align-items: flex-end;
-          gap: 3px;
+          gap: 2px;
           padding: 0 14px;
+          container-type: inline-size; /* 책등 폭이 이 줄 너비를 기준으로 줄어든다 */
         `
       : shelfGrid}
   align-items: ${({ $spine }) => ($spine ? 'flex-end' : 'end')};
@@ -1382,7 +1502,14 @@ const wiggle = keyframes`
 
 const SortableCell = styled.div`
   position: relative;
-  flex-shrink: 0;
+  ${({ $weight, $fill }) =>
+    $weight &&
+    css`
+      /* 한 줄이 가득 차면 남는 공간 없이 비중대로 나눠 갖고, 덜 찬 줄은 늘어나지 않는다 (기준: 10권, 평균 폭 40px) */
+      flex: ${$weight} 1 0;
+      min-width: 0;
+      ${!$fill && `max-width: calc(${$weight} * (100cqw - 46px) / 400);`}
+    `}
   z-index: ${({ $dragging }) => ($dragging ? 10 : 'auto')};
   filter: ${({ $dragging }) => ($dragging ? 'drop-shadow(0 8px 10px rgba(0, 0, 0, 0.5))' : 'none')};
 `;

@@ -14,7 +14,9 @@ import java.time.LocalDate;
  * @param coverColor 책장 표지 색 (#RRGGBB, 선택)
  * @param isbn       도서 검색으로 고른 책의 ISBN (선택)
  * @param publisher  출판사 (선택)
- * @param coverImageUrl 표지 이미지 URL (선택, 카카오 이미지 서버 주소만 받는다)
+ * @param coverImageUrl 표지 이미지 URL (선택, 예스24·카카오 이미지 서버 주소만 받는다)
+ * @param spineImageUrl 책등 이미지 URL (선택, 예스24 이미지 서버 주소만 받는다)
+ * @param productUrl    예스24 상품 페이지 (선택, 예스24 주소만 받는다)
  * @param shelfId    추가할 책장 (선택, 비우면 첫 번째 책장). 수정할 때는 무시된다 — 옮기기는 별도 API
  */
 public record ShelfBookRequestDto(
@@ -43,7 +45,13 @@ public record ShelfBookRequestDto(
         String publisher,
 
         @Size(max = 1000, message = "표지 주소가 너무 길어요.")
-        String coverImageUrl
+        String coverImageUrl,
+
+        @Size(max = 1000, message = "책등 주소가 너무 길어요.")
+        String spineImageUrl,
+
+        @Size(max = 1000, message = "상품 주소가 너무 길어요.")
+        String productUrl
 ) {
     public ShelfBookRequestDto {
         title = title == null ? null : title.trim();

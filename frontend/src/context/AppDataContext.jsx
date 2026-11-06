@@ -61,6 +61,10 @@ export const mapShelfBook = (b) => ({
   completedAt: b.completedAt,
   coverColor: b.coverColor,
   coverImageUrl: b.book.coverImageUrl ?? null, // 도서 검색으로 추가한 책의 실제 표지
+  paletteColors: b.paletteColors ?? [], // 표지 대표 색 3가지 (책등 3단 꾸밈용, 서버가 표지에서 뽑음)
+  spineImageUrl: b.spineImageUrl ?? null, // 예스24 책등 이미지 (등록된 책만)
+  productUrl: b.productUrl ?? null, // 예스24 상품 페이지 (책 정보를 보여줄 때 연결해야 하는 이용 조건)
+  yes24Pending: Boolean(b.yes24Pending), // 아직 예스24 와 연결되지 않았고 찾아 본 적도 없는 책
   certified: b.certified,
   shelfOrder: b.shelfOrder ?? null, // 직접 정한 위치 (정한 적 없으면 null)
   archived: Boolean(b.archived), // 보관함에 있는 책
@@ -361,6 +365,13 @@ export function AppDataProvider({ children }) {
       moveBook: async (id, shelfId) => {
         const res = await booksApi.moveShelfBook(id, shelfId);
         dispatch({ type: 'BOOK_PATCHED', book: mapShelfBook(res) });
+      },
+
+      /** 기존 책을 예스24 책 정보로 한꺼번에 연결하고, 바뀐 표지·책등을 반영하려고 책장을 다시 맞춘다 */
+      linkYes24: async () => {
+        const result = await booksApi.linkYes24Books();
+        await syncShelf();
+        return result;
       },
 
       archiveBook: async (id) => {

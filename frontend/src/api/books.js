@@ -6,16 +6,22 @@ export const MAX_REVIEW_LENGTH = 5000;
 
 /**
  * 내 책장 (JWT 필수)
- * 응답 항목: { completionId, book: { bookId, title, author }, completedAt, coverColor, certified, certifiedAt, earnedPoint, shelfOrder, archived, shelfId }
+ * 응답 항목: { completionId, book: { bookId, title, author }, completedAt, coverColor, certified, certifiedAt, earnedPoint, shelfOrder, archived, shelfId, paletteColors, spineImageUrl, productUrl, yes24Pending }
  */
 export const fetchShelf = () => apiFetch('/api/books/completions');
 
 /**
- * 도서 검색 (카카오 책 검색, 10권씩) — 검색을 쓸 수 없으면 503 BOOK_SEARCH_UNAVAILABLE
- * @returns {Promise<{ results: { title, author, publisher, isbn, coverImageUrl, publishedAt }[], hasMore: boolean }>}
+ * 도서 검색 (예스24 Open API, 10권씩) — 검색을 쓸 수 없으면 503 BOOK_SEARCH_UNAVAILABLE
+ * @returns {Promise<{ results: { title, author, publisher, isbn, coverImageUrl, spineImageUrl, productUrl, publishedAt }[], hasMore: boolean }>}
  */
 export const searchBooks = (query, page = 1) =>
   apiFetch(`/api/books/search?q=${encodeURIComponent(query)}&page=${page}`);
+
+/**
+ * 기존 책을 예스24 책 정보(표지·책등·상품 링크)로 한꺼번에 연결 (한 번에 30권까지)
+ * @returns {Promise<{ linked: number, notFound: number, remaining: number, stopped: boolean }>}
+ */
+export const linkYes24Books = () => apiFetch('/api/books/completions/link-yes24', { method: 'POST' });
 
 /** 내 책장(여러 개) 목록 — 응답 항목: { shelfId, name, position, bookCount } */
 export const fetchShelves = () => apiFetch('/api/books/shelves');
@@ -34,8 +40,8 @@ export const moveShelfBook = (completionId, shelfId) =>
 
 /**
  * 독후감 없이 책장에만 추가
- * @param {{ title, author, completedAt, coverColor, shelfId?, isbn?, publisher?, coverImageUrl? }} payload
- *   shelfId 를 비우면 첫 번째 책장, isbn·publisher·coverImageUrl 은 도서 검색으로 고른 책일 때
+ * @param {{ title, author, completedAt, coverColor, shelfId?, isbn?, publisher?, coverImageUrl?, spineImageUrl?, productUrl? }} payload
+ *   shelfId 를 비우면 첫 번째 책장, isbn 이하는 도서 검색으로 고른 책일 때
  */
 export const addShelfBook = (payload) => apiFetch('/api/books/completions', { method: 'POST', body: payload });
 
