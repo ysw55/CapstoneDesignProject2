@@ -13,7 +13,7 @@ import CommentPanel from './CommentPanel';
  * - onEdit / onDelete: 내가 쓴 글일 때만 우측 상단에 수정·삭제 버튼 표시
  */
 export default function QuoteCard({ post, highlight = false, onEdit, onDelete }) {
-  const { toggleLike } = useAppData();
+  const { toggleLike, toggleBookmark } = useAppData();
   const { isLoggedIn, openLogin } = useAuth();
   const mine = isMyPost(post);
 
@@ -25,7 +25,13 @@ export default function QuoteCard({ post, highlight = false, onEdit, onDelete })
     // 실패하면 AppDataContext 가 원래 상태로 되돌림 — 화면에서 따로 할 일 없음
     toggleLike(post).catch(() => {});
   };
-  const [saved, setSaved] = useState(false); // 저장(북마크)은 아직 내 기기 안에서만
+  const handleBookmark = () => {
+    if (!isLoggedIn) {
+      openLogin(); // 저장도 계정에 남기므로 로그인이 필요
+      return;
+    }
+    toggleBookmark(post).catch(() => {});
+  };
   const [commentsOpen, setCommentsOpen] = useState(false);
 
   return (
@@ -94,13 +100,13 @@ export default function QuoteCard({ post, highlight = false, onEdit, onDelete })
 
         <ActionButton
           type="button"
-          aria-pressed={saved}
-          aria-label="문장 저장"
-          $active={saved}
+          aria-pressed={post.bookmarked}
+          aria-label={post.bookmarked ? '문장 저장 취소' : '문장 저장'}
+          $active={post.bookmarked}
           $push
-          onClick={() => setSaved((v) => !v)}
+          onClick={handleBookmark}
         >
-          <Bookmark size={20} strokeWidth={1.8} fill={saved ? 'currentColor' : 'none'} />
+          <Bookmark size={20} strokeWidth={1.8} fill={post.bookmarked ? 'currentColor' : 'none'} />
         </ActionButton>
       </Actions>
 

@@ -64,6 +64,14 @@ export default function ProfilePage() {
               </span>
               <ChevronRight size={20} strokeWidth={2} aria-hidden />
             </LinkRow>
+
+            <LinkRow type="button" onClick={() => navigate('/profile/activity')}>
+              <span>
+                <strong>좋아요 · 저장한 문장</strong>
+                커뮤니티에서 하트·북마크한 문장 모아 보기
+              </span>
+              <ChevronRight size={20} strokeWidth={2} aria-hidden />
+            </LinkRow>
           </>
         ) : (
           <Card>

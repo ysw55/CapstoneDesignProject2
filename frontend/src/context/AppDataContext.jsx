@@ -38,6 +38,7 @@ export const mapQuote = (q) => ({
   likeCount: q.likeCount,
   commentCount: q.commentCount,
   liked: q.liked,
+  bookmarked: q.bookmarked, // 내가 저장(북마크)했는지
   mine: q.mine,
   edited: q.edited,
   createdAtRaw: q.createdAt,
@@ -296,6 +297,21 @@ export function AppDataProvider({ children }) {
           throw error;
         }
       },
+
+      /** 북마크(저장)도 좋아요처럼 낙관적으로 바꾸고, 실패하면 되돌린다 */
+      toggleBookmark: async (post) => {
+        const next = !post.bookmarked;
+        dispatch({ type: 'POST_PATCH', id: post.id, patch: { bookmarked: next } });
+        try {
+          const res = next ? await quotesApi.bookmarkQuote(post.id) : await quotesApi.unbookmarkQuote(post.id);
+          dispatch({ type: 'POST_PATCH', id: post.id, patch: { bookmarked: res.bookmarked } });
+        } catch (error) {
+          dispatch({ type: 'POST_PATCH', id: post.id, patch: { bookmarked: post.bookmarked } });
+          throw error;
+        }
+      },
+      /** 프로필의 "내 활동" 에서 좋아요·저장을 취소했을 때 피드에 이미 떠 있는 글의 상태도 맞춘다 */
+      patchFeedPost: (id, patch) => dispatch({ type: 'POST_PATCH', id, patch }),
 
       loadComments: async (postId) => {
         const list = await quotesApi.fetchComments(postId);

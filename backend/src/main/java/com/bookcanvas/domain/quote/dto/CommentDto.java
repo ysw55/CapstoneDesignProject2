@@ -43,6 +43,9 @@ public final class CommentDto {
         }
     }
 
+    /** 북마크(저장) 토글 결과 */
+    public record BookmarkResponse(Long quoteId, boolean bookmarked) {}
+
     /** 좋아요 토글 결과 */
     public record LikeResponse(Long quoteId, boolean liked, long likeCount) {}
 }

@@ -395,6 +395,77 @@ class ShelfQuoteAccountIntegrationTest {
     }
 
     @Test
+    @DisplayName("내 활동: 북마크 저장·취소(멱등), 좋아요·저장한 문장을 최근 순으로, 피드에 bookmarked 반영, 글 삭제 시 함께 사라짐")
+    void likedAndBookmarkedHistory() throws Exception {
+        String writer = signup("hist-writer@bookcanvas.com", "작성자");
+        String me = signup("hist-me@bookcanvas.com", "내이력");
+
+        long first = json(call(HttpMethod.POST, "/api/quotes",
+                Map.of("bookTitle", "어린 왕자", "author", "생텍쥐페리", "content", "첫 번째 문장", "tagName", "위로가 필요할 때"), writer))
+                .get("quoteId").asLong();
+        long second = json(call(HttpMethod.POST, "/api/quotes",
+                Map.of("bookTitle", "데미안", "author", "헤세", "content", "두 번째 문장", "tagName", "위로가 필요할 때"), writer))
+                .get("quoteId").asLong();
+
+        // 로그인이 필요하다
+        call(HttpMethod.GET, "/api/quotes/me/liked", null, null).andExpect(status().isUnauthorized());
+        call(HttpMethod.GET, "/api/quotes/me/bookmarked", null, null).andExpect(status().isUnauthorized());
+        call(HttpMethod.POST, "/api/quotes/" + first + "/bookmark", null, null).andExpect(status().isUnauthorized());
+
+        // 처음에는 비어 있다
+        call(HttpMethod.GET, "/api/quotes/me/liked", null, me)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+
+        // 첫 번째 → 두 번째 순서로 좋아요, 저장 (북마크는 두 번 눌러도 1)
+        call(HttpMethod.POST, "/api/quotes/" + first + "/like", null, me).andExpect(status().isOk());
+        call(HttpMethod.POST, "/api/quotes/" + second + "/like", null, me).andExpect(status().isOk());
+        call(HttpMethod.POST, "/api/quotes/" + first + "/bookmark", null, me)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.bookmarked").value(true));
+        call(HttpMethod.POST, "/api/quotes/" + first + "/bookmark", null, me).andExpect(status().isOk());
+        call(HttpMethod.POST, "/api/quotes/9999999/bookmark", null, me).andExpect(status().isNotFound());
+
+        // 좋아요한 문장: 최근에 누른 순(두 번째 → 첫 번째), 누른 시각 포함, 지금 상태(liked/bookmarked) 반영
+        JsonNode liked = json(call(HttpMethod.GET, "/api/quotes/me/liked", null, me).andExpect(status().isOk()));
+        assertThat(liked.get("totalElements").asInt()).isEqualTo(2);
+        assertThat(liked.get("content").get(0).get("quote").get("quoteId").asLong()).isEqualTo(second);
+        assertThat(liked.get("content").get(1).get("quote").get("quoteId").asLong()).isEqualTo(first);
+        assertThat(liked.get("content").get(0).get("actedAt").asText()).isNotBlank();
+        assertThat(liked.get("content").get(1).get("quote").get("bookmarked").asBoolean()).isTrue();
+        assertThat(liked.get("content").get(0).get("quote").get("bookmarked").asBoolean()).isFalse();
+        assertThat(liked.get("content").get(0).get("quote").get("book").get("title").asText()).isEqualTo("데미안");
+
+        // 저장한 문장: 첫 번째 하나
+        JsonNode saved = json(call(HttpMethod.GET, "/api/quotes/me/bookmarked", null, me).andExpect(status().isOk()));
+        assertThat(saved.get("totalElements").asInt()).isEqualTo(1);
+        assertThat(saved.get("content").get(0).get("quote").get("quoteId").asLong()).isEqualTo(first);
+
+        // 페이지 크기가 적용된다
+        call(HttpMethod.GET, "/api/quotes/me/liked?page=0&size=1", null, me)
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.last").value(false));
+
+        // 피드에도 bookmarked 가 내 기준으로 반영 (작성자 기준으로는 false)
+        call(HttpMethod.GET, "/api/quotes", null, me)
+                .andExpect(jsonPath("$.content[?(@.quoteId==" + first + ")].bookmarked").value(true));
+        call(HttpMethod.GET, "/api/quotes", null, writer)
+                .andExpect(jsonPath("$.content[?(@.quoteId==" + first + ")].bookmarked").value(false));
+
+        // 다른 사람의 이력은 섞이지 않는다
+        call(HttpMethod.GET, "/api/quotes/me/bookmarked", null, writer).andExpect(jsonPath("$.totalElements").value(0));
+
+        // 북마크 취소 → 저장한 문장에서 빠진다
+        call(HttpMethod.DELETE, "/api/quotes/" + first + "/bookmark", null, me)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.bookmarked").value(false));
+        call(HttpMethod.GET, "/api/quotes/me/bookmarked", null, me).andExpect(jsonPath("$.totalElements").value(0));
+
+        // 작성자가 글을 지우면 좋아요·저장 이력에서도 사라진다 (FK 오류 없이)
+        call(HttpMethod.POST, "/api/quotes/" + first + "/bookmark", null, me).andExpect(status().isOk());
+        call(HttpMethod.DELETE, "/api/quotes/" + first, null, writer).andExpect(status().isNoContent());
+        call(HttpMethod.GET, "/api/quotes/me/liked", null, me).andExpect(jsonPath("$.totalElements").value(1));
+        call(HttpMethod.GET, "/api/quotes/me/bookmarked", null, me).andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
     @DisplayName("피드: 없는 태그로 글쓰기 400, 비로그인 글쓰기 401")
     void quoteValidation() throws Exception {
         String token = signup("tag@bookcanvas.com", "태그테스트");
