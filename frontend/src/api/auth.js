@@ -17,6 +17,9 @@ export const fetchMe = () => apiFetch('/api/auth/me');
 /** @param {{ currentPassword: string, newPassword: string }} payload — 성공 시 204 */
 export const changePassword = (payload) => apiFetch('/api/auth/password', { method: 'POST', body: payload });
 
+/** 회원탈퇴 — 소셜 계정은 password 없이. 성공 시 204 */
+export const withdraw = (password) => apiFetch('/api/auth/withdraw', { method: 'POST', body: { password } });
+
 /**
  * 시연용 간편 로그인 — 실제 카카오/구글 OAuth 가 아니라 provider 별 시연 계정으로 로그인
  * @param {'kakao' | 'google'} provider

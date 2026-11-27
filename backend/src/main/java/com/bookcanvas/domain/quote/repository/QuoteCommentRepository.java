@@ -16,15 +16,19 @@ public interface QuoteCommentRepository extends JpaRepository<QuoteComment, Long
             SELECT c FROM QuoteComment c
             JOIN FETCH c.user
             WHERE c.quote.id = :quoteId
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :viewerId AND ub.blocked = c.user)
             ORDER BY c.createdAt ASC, c.id ASC
             """)
-    List<QuoteComment> findByQuoteIdWithUser(@Param("quoteId") Long quoteId);
+    List<QuoteComment> findByQuoteIdWithUser(@Param("quoteId") Long quoteId, @Param("viewerId") Long viewerId);
 
-    long countByQuoteId(Long quoteId);
-
-    /** 결과: [quoteId, count] */
-    @Query("SELECT c.quote.id, COUNT(c) FROM QuoteComment c WHERE c.quote.id IN :quoteIds GROUP BY c.quote.id")
-    List<Object[]> countGroupByQuoteIds(@Param("quoteIds") Collection<Long> quoteIds);
+    /** 결과: [quoteId, count] — viewerId 가 차단한 사용자의 댓글은 세지 않는다 (댓글 목록과 숫자를 맞춤) */
+    @Query("""
+            SELECT c.quote.id, COUNT(c) FROM QuoteComment c
+            WHERE c.quote.id IN :quoteIds
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :viewerId AND ub.blocked = c.user)
+            GROUP BY c.quote.id
+            """)
+    List<Object[]> countGroupByQuoteIds(@Param("quoteIds") Collection<Long> quoteIds, @Param("viewerId") Long viewerId);
 
     @Modifying
     @Query("DELETE FROM QuoteComment c WHERE c.quote.id = :quoteId")

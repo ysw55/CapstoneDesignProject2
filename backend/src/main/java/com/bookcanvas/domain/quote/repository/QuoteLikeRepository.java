@@ -34,9 +34,16 @@ public interface QuoteLikeRepository extends JpaRepository<QuoteLike, Long> {
             SELECT l FROM QuoteLike l
             JOIN FETCH l.quote q JOIN FETCH q.user JOIN FETCH q.book
             WHERE l.user.id = :userId AND q.isPublic = true
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :userId AND ub.blocked = q.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :userId AND qr.quote = q)
             ORDER BY l.createdAt DESC, l.id DESC
             """,
-            countQuery = "SELECT COUNT(l) FROM QuoteLike l WHERE l.user.id = :userId AND l.quote.isPublic = true")
+            countQuery = """
+            SELECT COUNT(l) FROM QuoteLike l
+            WHERE l.user.id = :userId AND l.quote.isPublic = true
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :userId AND ub.blocked = l.quote.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :userId AND qr.quote = l.quote)
+            """)
     Page<QuoteLike> findMyLikes(@Param("userId") Long userId, Pageable pageable);
 
     /** 피드 한 페이지 중 내가 좋아요한 글 ID */

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import * as quotesApi from '../api/quotes';
 import * as booksApi from '../api/books';
+import * as moderationApi from '../api/moderation';
 import { useAuth } from './AuthContext';
 import { COVER_PALETTE, tagFromName } from '../mockData';
 import { relativeTime } from '../utils/format';
@@ -28,6 +29,7 @@ const initialOf = (name) => name?.trim().charAt(0).toUpperCase() || '?';
 
 export const mapQuote = (q) => ({
   id: q.quoteId,
+  userId: q.author.userId,
   userName: q.author.username,
   userInitial: initialOf(q.author.username),
   userSkin: { background: q.author.profileBackgroundColor, border: q.author.profileBorderColor, image: q.author.profileImage, frame: q.author.profileFrame },
@@ -137,6 +139,8 @@ function reducer(state, action) {
       };
     case 'POST_REMOVED':
       return { ...state, posts: state.posts.filter((p) => p.id !== action.id) };
+    case 'USER_BLOCKED':
+      return { ...state, posts: state.posts.filter((p) => p.userId !== action.userId) };
     case 'POST_PATCH':
       return { ...state, posts: patchPost(state.posts, action.id, (p) => ({ ...p, ...action.patch })) };
     case 'COMMENTS_LOADED':
@@ -283,6 +287,22 @@ export function AppDataProvider({ children }) {
       deletePost: async (id) => {
         await quotesApi.deleteQuote(id);
         dispatch({ type: 'POST_REMOVED', id });
+      },
+
+      /** 신고한 글은 서버도 내 피드에서 빼므로 화면에서도 바로 지운다 */
+      reportPost: async (id, reason) => {
+        await moderationApi.reportQuote(id, reason);
+        dispatch({ type: 'POST_REMOVED', id });
+      },
+      /** 차단: 그 사람의 글을 바로 지우고, 남은 글의 댓글 수·댓글에서도 빠지도록 피드를 다시 불러온다 */
+      blockUser: async (userId) => {
+        await moderationApi.blockUser(userId);
+        dispatch({ type: 'USER_BLOCKED', userId });
+        loadFeed();
+      },
+      unblockUser: async (userId) => {
+        await moderationApi.unblockUser(userId);
+        loadFeed();
       },
 
       /** 낙관적 업데이트: 화면을 먼저 바꾸고, 서버 응답의 실제 숫자로 맞춘다. 실패하면 되돌림 */

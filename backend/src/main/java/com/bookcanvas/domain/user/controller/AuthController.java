@@ -7,6 +7,8 @@ import com.bookcanvas.domain.user.dto.ProfileSkinRequestDto;
 import com.bookcanvas.domain.user.dto.SignupRequestDto;
 import com.bookcanvas.domain.user.dto.TokenResponseDto;
 import com.bookcanvas.domain.user.dto.UserResponseDto;
+import com.bookcanvas.domain.user.dto.WithdrawRequestDto;
+import com.bookcanvas.domain.user.service.AccountDeletionService;
 import com.bookcanvas.domain.user.service.AuthService;
 import com.bookcanvas.global.security.AuthUser;
 import jakarta.validation.Valid;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final AccountDeletionService accountDeletionService;
 
     @PostMapping("/signup")
     public ResponseEntity<TokenResponseDto> signup(@Valid @RequestBody SignupRequestDto request) {
@@ -57,6 +60,16 @@ public class AuthController {
             @Valid @RequestBody PasswordChangeRequestDto request
     ) {
         authService.changePassword(authUser.userId(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 회원탈퇴 → 204. 계정과 글·댓글·책장이 모두 삭제된다 */
+    @PostMapping("/withdraw")
+    public ResponseEntity<Void> withdraw(
+            @AuthenticationPrincipal AuthUser authUser,
+            @RequestBody WithdrawRequestDto request
+    ) {
+        accountDeletionService.withdraw(authUser.userId(), request.password());
         return ResponseEntity.noContent().build();
     }
 

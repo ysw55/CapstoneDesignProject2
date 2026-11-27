@@ -7,6 +7,7 @@ import { IconButton } from '../components/common/IconButton';
 import Toast from '../components/common/Toast';
 import { ConfirmDialog } from '../components/common/Modal';
 import QuoteCard from '../components/feed/QuoteCard';
+import ReportBlockSheet from '../components/feed/ReportBlockSheet';
 import RecordSheet from '../components/record/RecordSheet';
 import LoadingScreen from '../components/common/LoadingScreen';
 import EmptyState from '../components/common/EmptyState';
@@ -25,6 +26,7 @@ export default function CommunityPage() {
   const [activeTag, setActiveTag] = useState(ALL);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [moreTarget, setMoreTarget] = useState(null); // 신고·차단 시트를 연 글
   const [toast, showToast] = useFlashToast(clearHighlight);
 
   // 피드에 있는 상황 태그를 중복 없이 뽑아 필터 칩으로 사용
@@ -96,6 +98,7 @@ export default function CommunityPage() {
               highlight={post.id === highlightPostId}
               onEdit={(p) => navigate(`/posts/${p.id}/edit`)}
               onDelete={setDeleteTarget}
+              onMore={setMoreTarget}
             />
           </li>
         ))}
@@ -112,6 +115,8 @@ export default function CommunityPage() {
       )}
 
       <RecordSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+
+      <ReportBlockSheet post={moreTarget} onClose={() => setMoreTarget(null)} onDone={showToast} />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

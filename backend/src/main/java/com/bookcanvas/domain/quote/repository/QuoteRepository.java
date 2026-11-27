@@ -18,15 +18,22 @@ import java.util.List;
  */
 public interface QuoteRepository extends JpaRepository<Quote, Long> {
 
-    /** 전체 공개 피드 (최신순은 Pageable 로 전달) */
+    /** 전체 공개 피드 (최신순은 Pageable 로 전달). viewerId 가 차단한 작성자의 글과 신고한 글은 뺀다 */
     @Query(value = """
             SELECT q FROM Quote q
             JOIN FETCH q.user
             JOIN FETCH q.book
             WHERE q.isPublic = true
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :viewerId AND ub.blocked = q.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :viewerId AND qr.quote = q)
             """,
-            countQuery = "SELECT COUNT(q) FROM Quote q WHERE q.isPublic = true")
-    Page<Quote> findPublicFeed(Pageable pageable);
+            countQuery = """
+            SELECT COUNT(q) FROM Quote q
+            WHERE q.isPublic = true
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :viewerId AND ub.blocked = q.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :viewerId AND qr.quote = q)
+            """)
+    Page<Quote> findPublicFeed(@Param("viewerId") Long viewerId, Pageable pageable);
 
     /**
      * 주어진 태그 ID 중 하나 이상 포함된 공개 Quote (OR 조건)
@@ -39,11 +46,15 @@ public interface QuoteRepository extends JpaRepository<Quote, Long> {
             JOIN FETCH q.book
             WHERE q.isPublic = true
               AND q.id IN (SELECT qtm.quote.id FROM QuoteTagMap qtm WHERE qtm.tag.id IN :tagIds)
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :viewerId AND ub.blocked = q.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :viewerId AND qr.quote = q)
             """,
             countQuery = """
             SELECT COUNT(q) FROM Quote q
             WHERE q.isPublic = true
               AND q.id IN (SELECT qtm.quote.id FROM QuoteTagMap qtm WHERE qtm.tag.id IN :tagIds)
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :viewerId AND ub.blocked = q.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :viewerId AND qr.quote = q)
             """)
-    Page<Quote> findByTagIds(@Param("tagIds") List<Long> tagIds, Pageable pageable);
+    Page<Quote> findByTagIds(@Param("viewerId") Long viewerId, @Param("tagIds") List<Long> tagIds, Pageable pageable);
 }

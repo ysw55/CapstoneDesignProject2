@@ -58,7 +58,9 @@ public enum ErrorCode {
     // ── 커뮤니티 ──
     QUOTE_NOT_FOUND(HttpStatus.NOT_FOUND, "글을 찾을 수 없어요. 삭제됐을 수 있어요."),
     QUOTE_FORBIDDEN(HttpStatus.FORBIDDEN, "내가 쓴 글만 수정·삭제할 수 있어요."),
-    INVALID_TAG(HttpStatus.BAD_REQUEST, "존재하지 않는 상황 태그예요.");
+    INVALID_TAG(HttpStatus.BAD_REQUEST, "존재하지 않는 상황 태그예요."),
+    CANNOT_REPORT_OWN_QUOTE(HttpStatus.BAD_REQUEST, "내가 쓴 글은 신고할 수 없어요."),
+    CANNOT_BLOCK_SELF(HttpStatus.BAD_REQUEST, "나 자신은 차단할 수 없어요.");
 
     private final HttpStatus status;
     private final String message;

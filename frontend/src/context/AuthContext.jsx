@@ -81,6 +81,9 @@ export function AuthProvider({ children }) {
     []
   );
 
+  /** 회원탈퇴 — 서버에서 계정이 지워지면 이 기기의 로그인 정보도 지운다 */
+  const withdraw = useCallback((password) => authApi.withdraw(password).then(logout), [logout]);
+
   /** 완독 인증 응답의 보상을 바로 반영 (내 정보 재조회 없이) */
   const applyCompletionReward = useCallback((reward) => {
     setUser((u) =>
@@ -133,6 +136,7 @@ export function AuthProvider({ children }) {
       socialLogin,
       logout,
       changePassword,
+      withdraw,
       applyCompletionReward,
       updateProfileSkin,
       purchaseItem,
@@ -140,7 +144,7 @@ export function AuthProvider({ children }) {
       openLogin,
       closeLogin,
     }),
-    [user, status, sessionExpired, login, signup, socialLogin, logout, changePassword, applyCompletionReward, updateProfileSkin, purchaseItem, loginSheet, openLogin, closeLogin]
+    [user, status, sessionExpired, login, signup, socialLogin, logout, changePassword, withdraw, applyCompletionReward, updateProfileSkin, purchaseItem, loginSheet, openLogin, closeLogin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
