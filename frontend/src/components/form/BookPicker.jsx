@@ -85,7 +85,7 @@ export default function BookPicker({ books, value, onChange, label = '어떤 책
                     disabled={disabled}
                     onChange={() => onChange({ bookId: book.id })}
                   />
-                  <BookCover title={book.title} color={book.coverColor} size="sm" />
+                  <BookCover title={book.title} color={book.coverColor} imageUrl={book.coverImageUrl} size="sm" />
                   <ShelfText>
                     <strong>{book.title}</strong>
                     <span>{book.author}</span>

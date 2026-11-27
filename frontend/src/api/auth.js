@@ -23,3 +23,6 @@ export const changePassword = (payload) => apiFetch('/api/auth/password', { meth
  */
 export const demoLogin = (provider) =>
   apiFetch('/api/auth/demo-login', { method: 'POST', body: { provider }, auth: false });
+
+/** 프로필 꾸미기 — 배경색/테두리색(#RRGGBB)와 프로필 사진(data URL), 각각 null 이면 해제. 갱신된 내 정보를 돌려준다 */
+export const updateProfileSkin = (payload) => apiFetch('/api/auth/profile-skin', { method: 'PUT', body: payload });

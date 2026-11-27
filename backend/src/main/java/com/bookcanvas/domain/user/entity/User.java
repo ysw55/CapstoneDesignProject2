@@ -62,6 +62,20 @@ public class User {
     private String profileBorderColor;
 
     /**
+     * 사용자가 직접 올린 프로필 사진 (data URL, 클라이언트에서 작게 줄인 JPEG). 없으면 null → 닉네임 첫 글자 아바타
+     */
+    @Column(name = "profile_image", columnDefinition = "LONGTEXT")
+    private String profileImage;
+
+    /** 프로필 테두리 장식 (상점에서 산 ShopItem 코드, 예: "GOLD_RING"). 없으면 null */
+    @Column(name = "profile_frame", length = 30)
+    private String profileFrame;
+
+    /** 상점에서 구매한 상품 코드 목록 (쉼표 구분) */
+    @Column(name = "owned_items", length = 500)
+    private String ownedItems;
+
+    /**
      * 완독 인증 등으로 쌓이는 보상 포인트.
      * {@code @ColumnDefault}: 이미 데이터가 있는 테이블에 컬럼을 추가해도 기존 행이 0 으로 채워짐
      */
@@ -116,6 +130,39 @@ public class User {
     public void applyProfileSkin(String backgroundColorHex, String borderColorHex) {
         this.profileBackgroundColor = backgroundColorHex;
         this.profileBorderColor = borderColorHex;
+    }
+
+    public void changeProfileBackgroundColor(String backgroundColorHex) {
+        this.profileBackgroundColor = backgroundColorHex;
+    }
+
+    /** 프로필 사진 변경 (null 이면 삭제) */
+    public void changeProfileImage(String dataUrl) {
+        this.profileImage = dataUrl;
+    }
+
+    public java.util.List<String> getOwnedItemList() {
+        return ownedItems == null || ownedItems.isBlank() ? java.util.List.of() : java.util.List.of(ownedItems.split(","));
+    }
+
+    public boolean owns(String itemCode) {
+        return getOwnedItemList().contains(itemCode);
+    }
+
+    public void addOwnedItem(String itemCode) {
+        this.ownedItems = ownedItems == null || ownedItems.isBlank() ? itemCode : ownedItems + "," + itemCode;
+    }
+
+    public void changeProfileFrame(String itemCode) {
+        this.profileFrame = itemCode;
+    }
+
+    /** 포인트 사용 (잔액 검증은 호출하는 쪽에서) */
+    public void spendRewardPoint(int point) {
+        if (point < 0 || point > rewardPoint) {
+            throw new IllegalArgumentException("사용 포인트가 올바르지 않습니다.");
+        }
+        this.rewardPoint -= point;
     }
 
     /**

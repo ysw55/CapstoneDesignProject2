@@ -37,7 +37,7 @@ export default function QuoteCard({ post, highlight = false, onEdit, onDelete })
   return (
     <Card $highlight={highlight}>
       <Header>
-        <ProfileAvatar name={post.userName} background={post.userSkin?.background} border={post.userSkin?.border} size={36} />
+        <ProfileAvatar name={post.userName} background={post.userSkin?.background} border={post.userSkin?.border} image={post.userSkin?.image} frame={post.userSkin?.frame} size={36} />
         <Meta>
           <UserName>
             {post.userName}

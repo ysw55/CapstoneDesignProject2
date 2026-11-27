@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as authApi from '../api/auth';
+import * as shopApi from '../api/shop';
 import { UNAUTHORIZED_EVENT, tokenStorage } from '../api/client';
 
 /**
@@ -93,6 +94,26 @@ export function AuthProvider({ children }) {
     );
   }, []);
 
+  /** 프로필 꾸미기 저장 — 서버 응답으로 내 정보 갱신 */
+  const updateProfileSkin = useCallback(
+    (profileBackgroundColor, profileImage = null, profileFrame = null) =>
+      authApi.updateProfileSkin({ profileBackgroundColor, profileImage, profileFrame }).then((me) => {
+        setUser(me);
+        return me;
+      }),
+    []
+  );
+
+  /** 상점 상품 구매 — 서버 응답으로 포인트·보유 목록 갱신 */
+  const purchaseItem = useCallback(
+    (code) =>
+      shopApi.purchaseItem(code).then((me) => {
+        setUser(me);
+        return me;
+      }),
+    []
+  );
+
   const openLogin = useCallback((mode = 'login') => {
     setSessionExpired(false);
     setLoginSheet(mode);
@@ -113,11 +134,13 @@ export function AuthProvider({ children }) {
       logout,
       changePassword,
       applyCompletionReward,
+      updateProfileSkin,
+      purchaseItem,
       loginSheet,
       openLogin,
       closeLogin,
     }),
-    [user, status, sessionExpired, login, signup, socialLogin, logout, changePassword, applyCompletionReward, loginSheet, openLogin, closeLogin]
+    [user, status, sessionExpired, login, signup, socialLogin, logout, changePassword, applyCompletionReward, updateProfileSkin, purchaseItem, loginSheet, openLogin, closeLogin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

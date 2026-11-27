@@ -30,7 +30,7 @@ export const mapQuote = (q) => ({
   id: q.quoteId,
   userName: q.author.username,
   userInitial: initialOf(q.author.username),
-  userSkin: { background: q.author.profileBackgroundColor, border: q.author.profileBorderColor },
+  userSkin: { background: q.author.profileBackgroundColor, border: q.author.profileBorderColor, image: q.author.profileImage, frame: q.author.profileFrame },
   tag: tagFromName(q.tags[0]?.name ?? ''),
   bookTitle: q.book.title,
   author: q.book.author,

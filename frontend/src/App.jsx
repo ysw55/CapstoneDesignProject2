@@ -17,6 +17,8 @@ import BookFormPage from './pages/BookFormPage';
 import PostFormPage from './pages/PostFormPage';
 import CompletionFormPage from './pages/CompletionFormPage';
 import MyActivityPage from './pages/MyActivityPage';
+import ShopPage from './pages/ShopPage';
+import ProfileEditPage from './pages/ProfileEditPage';
 
 export default function App() {
   return (
@@ -45,6 +47,8 @@ export default function App() {
                 {/* 완독 인증 (백엔드 연동, 로그인 필요) */}
                 <Route path="books/certify" element={<RequireAuth title="완독 인증은 로그인 후 할 수 있어요"><CompletionFormPage /></RequireAuth>} />
                 <Route path="profile/activity" element={<RequireAuth title="좋아요·저장한 문장은 로그인 후 볼 수 있어요"><MyActivityPage /></RequireAuth>} />
+                <Route path="profile/edit" element={<RequireAuth title="프로필 꾸미기는 로그인 후 할 수 있어요"><ProfileEditPage /></RequireAuth>} />
+                <Route path="profile/shop" element={<RequireAuth title="상점은 로그인 후 이용할 수 있어요"><ShopPage /></RequireAuth>} />
                 <Route path="profile/settings" element={<Settings />} />
               </Route>
 

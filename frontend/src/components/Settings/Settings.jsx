@@ -68,6 +68,8 @@ export default function Settings() {
                 name={user.username}
                 background={user.profileBackgroundColor}
                 border={user.profileBorderColor}
+                image={user.profileImage}
+                frame={user.profileFrame}
               />
               <RowText>
                 <AccountName>{user.username}</AccountName>
