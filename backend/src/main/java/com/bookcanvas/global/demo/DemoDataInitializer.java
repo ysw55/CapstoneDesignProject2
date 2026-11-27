@@ -34,7 +34,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 캡스톤 시연용 샘플 데이터 (app.demo.seed-enabled=true 이고 시연 계정이 아직 없을 때 1회만 실행)
+ * 캡스톤 시연용 샘플 데이터 (app.demo.seed-enabled=true 이고 샘플 계정이 하나도 없을 때만 실행)
  *
  * <ul>
  *   <li>커뮤니티 사용자 5명 (비밀번호 {@value #DEMO_PASSWORD}) + 피드 글 7개, 좋아요, 댓글</li>
@@ -64,7 +64,11 @@ public class DemoDataInitializer implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (!demoProperties.seedEnabled() || userRepository.existsByEmail(DemoAccounts.KAKAO.email())) {
+        // 샘플 계정이 하나라도 남아 있으면 이미 넣은 것 (탈퇴한 계정이 있어도 중복 생성하지 않는다)
+        if (!demoProperties.seedEnabled()
+                || userRepository.existsByEmail(DemoAccounts.KAKAO.email())
+                || userRepository.existsByEmail(DemoAccounts.GOOGLE.email())
+                || userRepository.existsByEmailEndingWith("@demo.bookcanvas.app")) {
             return;
         }
         log.info("[Demo] 시연용 샘플 데이터를 생성합니다.");

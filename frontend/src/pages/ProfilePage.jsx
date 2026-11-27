@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { BadgeCheck, ChevronRight, Coins, LogIn, Settings } from 'lucide-react';
+import { BadgeCheck, ChevronRight, Coins, LogIn, Palette, Settings } from 'lucide-react';
 import ScreenHeader from '../components/common/ScreenHeader';
 import { IconButton } from '../components/common/IconButton';
 import Button from '../components/common/Button';
@@ -32,16 +32,27 @@ export default function ProfilePage() {
         ) : isLoggedIn ? (
           <>
             {/* 완독 보상 스킨이 적용된 프로필 카드 */}
-            <SkinCard $bg={user.profileBackgroundColor} $border={user.profileBorderColor}>
+            <SkinCard
+              as="button"
+              type="button"
+              aria-label="프로필 꾸미기"
+              onClick={() => navigate('/profile/edit')}
+              $bg={user.profileBackgroundColor}
+              $border={user.profileBorderColor}
+            >
               <ProfileAvatar
                 name={user.username}
                 background={user.profileBackgroundColor}
                 border={user.profileBorderColor}
+                image={user.profileImage}
+                frame={user.profileFrame}
                 size={64}
               />
               <Name>{user.username}</Name>
               <Muted>{user.email}</Muted>
-              {!user.profileBackgroundColor && <SkinHint>첫 완독 인증을 하면 프로필 스킨이 생겨요</SkinHint>}
+              <SkinHint>
+                <Palette size={12} strokeWidth={2.2} aria-hidden /> 눌러서 프로필 꾸미기
+              </SkinHint>
             </SkinCard>
 
             <Stats>
@@ -69,6 +80,14 @@ export default function ProfilePage() {
               <span>
                 <strong>좋아요 · 저장한 문장</strong>
                 커뮤니티에서 하트·북마크한 문장 모아 보기
+              </span>
+              <ChevronRight size={20} strokeWidth={2} aria-hidden />
+            </LinkRow>
+
+            <LinkRow type="button" onClick={() => navigate('/profile/shop')}>
+              <span>
+                <strong>상점</strong>
+                모은 포인트로 사용할 수 있는 곳
               </span>
               <ChevronRight size={20} strokeWidth={2} aria-hidden />
             </LinkRow>
@@ -121,6 +140,13 @@ const SkinCard = styled(Card)`
   background:
     linear-gradient(180deg, ${({ $bg }) => ($bg ? `${$bg}1F` : 'transparent')} 0%, transparent 70%),
     ${({ theme }) => theme.colors.surface};
+  width: 100%;
+  cursor: pointer;
+  transition: transform ${({ theme }) => theme.motion.fast};
+
+  &:active {
+    transform: scale(0.98);
+  }
 `;
 
 const SocialWrap = styled.div`
@@ -141,6 +167,9 @@ const Muted = styled.p`
 `;
 
 const SkinHint = styled.p`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-top: ${({ theme }) => theme.space(2)};
   padding: 4px 10px;
   border-radius: ${({ theme }) => theme.radius.pill};

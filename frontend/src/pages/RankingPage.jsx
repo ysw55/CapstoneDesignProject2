@@ -1,13 +1,47 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Crown, Heart, ThumbsUp } from 'lucide-react';
 import ScreenHeader from '../components/common/ScreenHeader';
 import BookCover from '../components/book/BookCover';
+import { searchBooks } from '../api/books';
 import { monthlyBestBooks, weeklyBestQuotes } from '../mockData';
 import { formatCount } from '../utils/format';
 
+const coverCache = new Map(); // 제목 → 표지 주소(찾지 못하면 null). 화면을 오갈 때 다시 검색하지 않도록
+
+/**
+ * 랭킹 목록은 고정 데이터라 표지 주소가 없어서, 도서 검색(예스24)으로 제목을 찾아 표지를 채운다.
+ * 검색을 쓸 수 없거나(로그인 전·503 등) 못 찾으면 조용히 단색 표지로 둔다.
+ */
+function useBookCovers(books) {
+  const [covers, setCovers] = useState(() => Object.fromEntries([...coverCache].filter(([, v]) => v)));
+
+  useEffect(() => {
+    let cancelled = false;
+    books.forEach(async (book) => {
+      if (coverCache.has(book.title)) return;
+      coverCache.set(book.title, null);
+      try {
+        const { results } = await searchBooks(book.title);
+        const hit = results.find((r) => r.title.includes(book.title) && r.coverImageUrl) ?? results.find((r) => r.coverImageUrl);
+        if (!hit) return coverCache.delete(book.title);
+        coverCache.set(book.title, hit.coverImageUrl);
+        if (!cancelled) setCovers((c) => ({ ...c, [book.title]: hit.coverImageUrl }));
+      } catch {
+        coverCache.delete(book.title); // 다음에 다시 시도
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [books]);
+
+  return covers;
+}
+
 export default function RankingPage() {
   const [champion, ...runnersUp] = monthlyBestBooks;
+  const covers = useBookCovers(monthlyBestBooks);
 
   return (
     <>
@@ -21,7 +55,7 @@ export default function RankingPage() {
         </SectionHead>
 
         <ChampionCard>
-          <BookCover title={champion.title} author={champion.author} color="#F8F9FA" size="lg" />
+          <BookCover title={champion.title} author={champion.author} color={champion.coverColor} imageUrl={covers[champion.title]} size="lg" />
           <ChampionInfo>
             <ChampionBadge>
               <Crown size={14} strokeWidth={2.4} fill="currentColor" aria-hidden />
@@ -40,7 +74,7 @@ export default function RankingPage() {
           {runnersUp.map((book) => (
             <BookRow key={book.rank}>
               <RankNumber>{book.rank}</RankNumber>
-              <BookCover title={book.title} color={book.coverColor} size="sm" />
+              <BookCover title={book.title} color={book.coverColor} imageUrl={covers[book.title]} size="sm" />
               <RowText>
                 <RowTitle>{book.title}</RowTitle>
                 <RowSub>{book.author}</RowSub>

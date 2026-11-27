@@ -2,6 +2,7 @@ package com.bookcanvas.domain.quote.service;
 
 import com.bookcanvas.domain.book.entity.Book;
 import com.bookcanvas.domain.book.service.BookFinder;
+import com.bookcanvas.domain.moderation.QuoteReportRepository;
 import com.bookcanvas.domain.quote.dto.CommentDto;
 import com.bookcanvas.domain.quote.dto.QuoteHistoryResponse;
 import com.bookcanvas.domain.quote.dto.QuoteRequestDto;
@@ -62,6 +63,7 @@ public class QuoteService {
     private final QuoteLikeRepository quoteLikeRepository;
     private final QuoteBookmarkRepository quoteBookmarkRepository;
     private final QuoteCommentRepository quoteCommentRepository;
+    private final QuoteReportRepository quoteReportRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final BookFinder bookFinder;
@@ -75,10 +77,10 @@ public class QuoteService {
     public PageResponse<QuoteResponse> getFeed(Long currentUserId, List<Long> tagIds, Pageable pageable) {
         Page<Quote> page;
         if (tagIds == null || tagIds.isEmpty()) {
-            page = quoteRepository.findPublicFeed(pageable);
+            page = quoteRepository.findPublicFeed(currentUserId, pageable);
         } else {
             validateTagIds(tagIds);
-            page = quoteRepository.findByTagIds(tagIds, pageable);
+            page = quoteRepository.findByTagIds(currentUserId, tagIds, pageable);
         }
 
         Map<Long, QuoteResponse> byId = toResponseMap(page.getContent(), currentUserId);
@@ -93,7 +95,7 @@ public class QuoteService {
         if (ids.isEmpty()) return Map.of();
 
         Map<Long, Long> likeCounts = toCountMap(quoteLikeRepository.countGroupByQuoteIds(ids));
-        Map<Long, Long> commentCounts = toCountMap(quoteCommentRepository.countGroupByQuoteIds(ids));
+        Map<Long, Long> commentCounts = toCountMap(quoteCommentRepository.countGroupByQuoteIds(ids, currentUserId));
         Set<Long> likedIds = currentUserId == null ? Set.of() : new HashSet<>(quoteLikeRepository.findLikedQuoteIds(currentUserId, ids));
         Set<Long> bookmarkedIds = currentUserId == null ? Set.of() : new HashSet<>(quoteBookmarkRepository.findBookmarkedQuoteIds(currentUserId, ids));
 
@@ -168,7 +170,7 @@ public class QuoteService {
         return QuoteResponse.of(
                 quote,
                 quoteLikeRepository.countByQuoteId(quoteId),
-                quoteCommentRepository.countByQuoteId(quoteId),
+                toCountMap(quoteCommentRepository.countGroupByQuoteIds(List.of(quoteId), userId)).getOrDefault(quoteId, 0L),
                 quoteLikeRepository.existsByUserIdAndQuoteId(userId, quoteId),
                 quoteBookmarkRepository.existsByUserIdAndQuoteId(userId, quoteId),
                 userId);
@@ -177,10 +179,11 @@ public class QuoteService {
     @Transactional
     public void delete(Long userId, Long quoteId) {
         Quote quote = getOwnedQuote(userId, quoteId);
-        // 좋아요·댓글은 Quote 와 양방향 관계가 없으므로 먼저 지운다 (FK 제약)
+        // 좋아요·댓글·신고는 Quote 와 양방향 관계가 없으므로 먼저 지운다 (FK 제약)
         quoteLikeRepository.deleteAllByQuoteId(quoteId);
         quoteBookmarkRepository.deleteAllByQuoteId(quoteId);
         quoteCommentRepository.deleteAllByQuoteId(quoteId);
+        quoteReportRepository.deleteAllByQuoteId(quoteId);
         quoteRepository.delete(quote);
         log.info("[Quote] 삭제 - userId={}, quoteId={}", userId, quoteId);
     }
@@ -234,7 +237,7 @@ public class QuoteService {
 
     public List<CommentDto.Response> getComments(Long currentUserId, Long quoteId) {
         getQuote(quoteId);
-        return quoteCommentRepository.findByQuoteIdWithUser(quoteId).stream()
+        return quoteCommentRepository.findByQuoteIdWithUser(quoteId, currentUserId).stream()
                 .map(c -> CommentDto.Response.of(c, currentUserId))
                 .toList();
     }

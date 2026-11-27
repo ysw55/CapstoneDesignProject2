@@ -17,6 +17,9 @@ public record UserResponseDto(
         AuthProvider provider,
         String profileBackgroundColor,
         String profileBorderColor,
+        String profileImage,
+        String profileFrame,
+        java.util.List<String> ownedItems,
         int rewardPoint,
         long completedBookCount
 ) {
@@ -29,6 +32,9 @@ public record UserResponseDto(
                 user.getProvider(),
                 user.getProfileBackgroundColor(),
                 user.getProfileBorderColor(),
+                user.getProfileImage(),
+                user.getProfileFrame(),
+                user.getOwnedItemList(),
                 user.getRewardPoint(),
                 completedBookCount
         );

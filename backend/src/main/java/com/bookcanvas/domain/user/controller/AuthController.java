@@ -3,9 +3,12 @@ package com.bookcanvas.domain.user.controller;
 import com.bookcanvas.domain.user.dto.DemoLoginRequestDto;
 import com.bookcanvas.domain.user.dto.LoginRequestDto;
 import com.bookcanvas.domain.user.dto.PasswordChangeRequestDto;
+import com.bookcanvas.domain.user.dto.ProfileSkinRequestDto;
 import com.bookcanvas.domain.user.dto.SignupRequestDto;
 import com.bookcanvas.domain.user.dto.TokenResponseDto;
 import com.bookcanvas.domain.user.dto.UserResponseDto;
+import com.bookcanvas.domain.user.dto.WithdrawRequestDto;
+import com.bookcanvas.domain.user.service.AccountDeletionService;
 import com.bookcanvas.domain.user.service.AuthService;
 import com.bookcanvas.global.security.AuthUser;
 import jakarta.validation.Valid;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
  *   <li>{@code POST /login}  로그인 → 200 + 토큰 (공개)</li>
  *   <li>{@code GET  /me}     내 정보 → 200 (JWT 필요) — 앱 재실행 시 로그인 상태 복원용</li>
  *   <li>{@code POST /password}   비밀번호 변경 → 204 (JWT 필요)</li>
+ *   <li>{@code PUT  /profile-skin} 프로필 사진·테두리 꾸미기 → 200 + 내 정보 (JWT 필요)</li>
  *   <li>{@code POST /demo-login} 시연용 카카오/구글 간편 로그인 → 200 + 토큰 (공개, 실제 OAuth 아님)</li>
  * </ul>
  */
@@ -33,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final AccountDeletionService accountDeletionService;
 
     @PostMapping("/signup")
     public ResponseEntity<TokenResponseDto> signup(@Valid @RequestBody SignupRequestDto request) {
@@ -56,6 +61,24 @@ public class AuthController {
     ) {
         authService.changePassword(authUser.userId(), request);
         return ResponseEntity.noContent().build();
+    }
+
+    /** 회원탈퇴 → 204. 계정과 글·댓글·책장이 모두 삭제된다 */
+    @PostMapping("/withdraw")
+    public ResponseEntity<Void> withdraw(
+            @AuthenticationPrincipal AuthUser authUser,
+            @RequestBody WithdrawRequestDto request
+    ) {
+        accountDeletionService.withdraw(authUser.userId(), request.password());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/profile-skin")
+    public ResponseEntity<UserResponseDto> updateProfileSkin(
+            @AuthenticationPrincipal AuthUser authUser,
+            @Valid @RequestBody ProfileSkinRequestDto request
+    ) {
+        return ResponseEntity.ok(authService.updateProfileSkin(authUser.userId(), request));
     }
 
     @PostMapping("/demo-login")

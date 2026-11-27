@@ -3,6 +3,7 @@ package com.bookcanvas.domain.user.service;
 import com.bookcanvas.domain.book.repository.BookCompletionRepository;
 import com.bookcanvas.domain.user.dto.LoginRequestDto;
 import com.bookcanvas.domain.user.dto.PasswordChangeRequestDto;
+import com.bookcanvas.domain.user.dto.ProfileSkinRequestDto;
 import com.bookcanvas.domain.user.dto.SignupRequestDto;
 import com.bookcanvas.domain.user.dto.TokenResponseDto;
 import com.bookcanvas.domain.user.dto.UserResponseDto;
@@ -93,6 +94,22 @@ public class AuthService {
     public UserResponseDto getMe(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        return toResponse(user);
+    }
+
+    /** 프로필 배경/테두리 색 변경 (null 이면 해제) */
+    @Transactional
+    public UserResponseDto updateProfileSkin(Long userId, ProfileSkinRequestDto request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 배경색은 자유. 테두리 장식은 상점에서 산 것만 적용할 수 있다
+        user.changeProfileBackgroundColor(request.profileBackgroundColor());
+        user.changeProfileImage(request.profileImage());
+        String frame = request.profileFrame();
+        if (frame != null && !user.owns(frame)) {
+            throw new BusinessException(ErrorCode.ITEM_NOT_OWNED);
+        }
+        user.changeProfileFrame(frame);
         return toResponse(user);
     }
 

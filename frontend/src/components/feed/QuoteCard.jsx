@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled, { css, keyframes } from 'styled-components';
-import { Bookmark, BookOpen, Heart, MessageCircle, Pencil, Trash2 } from 'lucide-react';
+import { Bookmark, BookOpen, Heart, MessageCircle, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { isMyPost, useAppData } from '../../context/AppDataContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatCount } from '../../utils/format';
@@ -11,8 +11,9 @@ import CommentPanel from './CommentPanel';
  * 커뮤니티 피드의 문장 카드 한 장.
  * - highlight: 방금 올리거나 수정한 글이면 강조
  * - onEdit / onDelete: 내가 쓴 글일 때만 우측 상단에 수정·삭제 버튼 표시
+ * - onMore: 다른 사람 글일 때 우측 상단 점 3개 (신고·차단)
  */
-export default function QuoteCard({ post, highlight = false, onEdit, onDelete }) {
+export default function QuoteCard({ post, highlight = false, onEdit, onDelete, onMore }) {
   const { toggleLike, toggleBookmark } = useAppData();
   const { isLoggedIn, openLogin } = useAuth();
   const mine = isMyPost(post);
@@ -37,7 +38,7 @@ export default function QuoteCard({ post, highlight = false, onEdit, onDelete })
   return (
     <Card $highlight={highlight}>
       <Header>
-        <ProfileAvatar name={post.userName} background={post.userSkin?.background} border={post.userSkin?.border} size={36} />
+        <ProfileAvatar name={post.userName} background={post.userSkin?.background} border={post.userSkin?.border} image={post.userSkin?.image} frame={post.userSkin?.frame} size={36} />
         <Meta>
           <UserName>
             {post.userName}
@@ -55,6 +56,18 @@ export default function QuoteCard({ post, highlight = false, onEdit, onDelete })
             </OwnerButton>
             <OwnerButton type="button" aria-label="글 삭제" $danger onClick={() => onDelete?.(post)}>
               <Trash2 size={16} strokeWidth={2} />
+            </OwnerButton>
+          </OwnerActions>
+        )}
+        {!mine && (
+          <OwnerActions>
+            <OwnerButton
+              type="button"
+              aria-label="신고 · 차단"
+              aria-haspopup="dialog"
+              onClick={() => (isLoggedIn ? onMore?.(post) : openLogin())}
+            >
+              <MoreVertical size={18} strokeWidth={2} />
             </OwnerButton>
           </OwnerActions>
         )}

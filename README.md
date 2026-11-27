@@ -199,6 +199,7 @@ DROP DATABASE bookcanvas;
 | POST | `/api/auth/demo-login` | 시연용 카카오/구글 로그인 `{ "provider": "kakao" }` | - |
 | GET | `/api/auth/me` | 내 정보 | JWT |
 | POST | `/api/auth/password` | 비밀번호 변경 | JWT |
+| POST | `/api/auth/withdraw` | 회원탈퇴 (이메일 계정은 `password` 필요) — 계정·글·댓글·책장 삭제 | JWT |
 | GET | `/api/books/completions` | 내 책장 | JWT |
 | POST / PUT / DELETE | `/api/books/completions[/{id}]` | 책장 추가 · 수정 · 삭제 | JWT |
 | GET | `/api/books/search?q=&page=` | 도서 검색 (예스24 국내도서, 10권씩). 키가 없으면 503 `BOOK_SEARCH_UNAVAILABLE` | JWT |
@@ -214,6 +215,9 @@ DROP DATABASE bookcanvas;
 | POST / DELETE | `/api/quotes/{id}/bookmark` | 북마크(저장) · 취소 | JWT |
 | GET | `/api/quotes/me/liked` · `/api/quotes/me/bookmarked` | 내가 좋아요 · 저장한 문장 (최근에 누른 순, `?page=&size=`) | JWT |
 | GET / POST | `/api/quotes/{id}/comments` | 댓글 조회 · 작성 | 조회는 공개 |
+| POST | `/api/quotes/{id}/report` | 글 신고 (`reason`: SPAM · ABUSE · ADULT · COPYRIGHT · OTHER) — 신고한 글은 내 피드에서 숨김 | JWT |
+| POST / DELETE | `/api/users/{id}/block` | 사용자 차단 · 해제 — 차단한 사람의 글·댓글이 내게 안 보임 | JWT |
+| GET | `/api/users/me/blocks` | 내가 차단한 사용자 | JWT |
 
 인증이 필요한 요청에는 `Authorization: Bearer <accessToken>` 헤더를 붙입니다. 에러는 `{ status, code, message, fieldErrors }` 형식으로 응답합니다.
 

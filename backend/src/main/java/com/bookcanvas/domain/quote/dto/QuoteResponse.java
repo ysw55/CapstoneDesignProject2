@@ -63,9 +63,9 @@ public record QuoteResponse(
     }
 
     /** 작성자 요약 정보 */
-    public record AuthorInfo(Long userId, String username, String profileBackgroundColor, String profileBorderColor) {
+    public record AuthorInfo(Long userId, String username, String profileBackgroundColor, String profileBorderColor, String profileImage, String profileFrame) {
         public static AuthorInfo from(User user) {
-            return new AuthorInfo(user.getId(), user.getUsername(), user.getProfileBackgroundColor(), user.getProfileBorderColor());
+            return new AuthorInfo(user.getId(), user.getUsername(), user.getProfileBackgroundColor(), user.getProfileBorderColor(), user.getProfileImage(), user.getProfileFrame());
         }
     }
 

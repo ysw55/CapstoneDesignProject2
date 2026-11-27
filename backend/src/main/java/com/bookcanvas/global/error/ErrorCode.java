@@ -33,6 +33,12 @@ public enum ErrorCode {
     SAME_AS_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "새 비밀번호가 현재 비밀번호와 같아요."),
     SOCIAL_ACCOUNT_PASSWORD(HttpStatus.BAD_REQUEST, "소셜 로그인 계정은 비밀번호를 변경할 수 없어요."),
 
+    // ── 상점 ──
+    SHOP_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 상품이에요."),
+    ALREADY_OWNED_ITEM(HttpStatus.CONFLICT, "이미 가지고 있는 상품이에요."),
+    NOT_ENOUGH_POINT(HttpStatus.BAD_REQUEST, "포인트가 부족해요."),
+    ITEM_NOT_OWNED(HttpStatus.FORBIDDEN, "구매하지 않은 상품은 적용할 수 없어요."),
+
     // ── 내 책장 / 완독 인증 ──
     REVIEW_TOO_SHORT(HttpStatus.BAD_REQUEST, "독후감은 최소 200자 이상 작성해야 완독 인증이 가능해요."),
     INVALID_COMPLETION_DATE(HttpStatus.BAD_REQUEST, "완독 날짜는 오늘 이후로 설정할 수 없어요."),
@@ -52,7 +58,9 @@ public enum ErrorCode {
     // ── 커뮤니티 ──
     QUOTE_NOT_FOUND(HttpStatus.NOT_FOUND, "글을 찾을 수 없어요. 삭제됐을 수 있어요."),
     QUOTE_FORBIDDEN(HttpStatus.FORBIDDEN, "내가 쓴 글만 수정·삭제할 수 있어요."),
-    INVALID_TAG(HttpStatus.BAD_REQUEST, "존재하지 않는 상황 태그예요.");
+    INVALID_TAG(HttpStatus.BAD_REQUEST, "존재하지 않는 상황 태그예요."),
+    CANNOT_REPORT_OWN_QUOTE(HttpStatus.BAD_REQUEST, "내가 쓴 글은 신고할 수 없어요."),
+    CANNOT_BLOCK_SELF(HttpStatus.BAD_REQUEST, "나 자신은 차단할 수 없어요.");
 
     private final HttpStatus status;
     private final String message;

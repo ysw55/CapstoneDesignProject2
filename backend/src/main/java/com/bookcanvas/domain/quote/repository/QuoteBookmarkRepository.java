@@ -32,8 +32,15 @@ public interface QuoteBookmarkRepository extends JpaRepository<QuoteBookmark, Lo
             SELECT b FROM QuoteBookmark b
             JOIN FETCH b.quote q JOIN FETCH q.user JOIN FETCH q.book
             WHERE b.user.id = :userId AND q.isPublic = true
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :userId AND ub.blocked = q.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :userId AND qr.quote = q)
             ORDER BY b.createdAt DESC, b.id DESC
             """,
-            countQuery = "SELECT COUNT(b) FROM QuoteBookmark b WHERE b.user.id = :userId AND b.quote.isPublic = true")
+            countQuery = """
+            SELECT COUNT(b) FROM QuoteBookmark b
+            WHERE b.user.id = :userId AND b.quote.isPublic = true
+              AND NOT EXISTS (SELECT ub.id FROM UserBlock ub WHERE ub.blocker.id = :userId AND ub.blocked = b.quote.user)
+              AND NOT EXISTS (SELECT qr.id FROM QuoteReport qr WHERE qr.reporter.id = :userId AND qr.quote = b.quote)
+            """)
     Page<QuoteBookmark> findMyBookmarks(@Param("userId") Long userId, Pageable pageable);
 }

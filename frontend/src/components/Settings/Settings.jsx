@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
+  Ban,
   Bell,
   ChevronLeft,
   ChevronRight,
@@ -12,12 +13,15 @@ import {
   Megaphone,
   Moon,
   Coins,
+  UserX,
 } from 'lucide-react';
 import Switch from '../common/Switch';
 import { ConfirmDialog } from '../common/Modal';
 import { useThemeMode } from '../../context/ThemeModeContext';
 import { useAuth } from '../../context/AuthContext';
 import ChangePasswordSheet from '../auth/ChangePasswordSheet';
+import BlockedUsersSheet from './BlockedUsersSheet';
+import WithdrawSheet from '../auth/WithdrawSheet';
 import SocialLoginButtons from '../auth/SocialLoginButtons';
 import ProfileAvatar from '../common/ProfileAvatar';
 
@@ -34,6 +38,8 @@ export default function Settings() {
   const [serviceNoti, setServiceNoti] = useState(true);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [notice, setNotice] = useState(null);
 
   const handleBack = () => {
@@ -68,6 +74,8 @@ export default function Settings() {
                 name={user.username}
                 background={user.profileBackgroundColor}
                 border={user.profileBorderColor}
+                image={user.profileImage}
+                frame={user.profileFrame}
               />
               <RowText>
                 <AccountName>{user.username}</AccountName>
@@ -103,6 +111,11 @@ export default function Settings() {
               checked={isPrivate}
               onChange={setIsPrivate}
             />
+            <Row as="button" type="button" onClick={() => setBlockedOpen(true)}>
+              <RowIcon><Ban size={18} /></RowIcon>
+              <RowText><RowLabel>차단한 사용자</RowLabel></RowText>
+              <Chevron />
+            </Row>
             <Row as="button" type="button" onClick={() => setLogoutOpen(true)}>
               <RowIcon $tone="danger"><LogOut size={18} /></RowIcon>
               <RowText><RowLabel $tone="danger">로그아웃</RowLabel></RowText>
@@ -163,13 +176,40 @@ export default function Settings() {
         {!isLoggedIn && <SectionFooter>로그인하면 알림을 설정할 수 있어요.</SectionFooter>}
       </Section>
 
+      {/* 4. 회원탈퇴 */}
+      {isLoggedIn && (
+        <Section>
+          <Group>
+            <Row as="button" type="button" onClick={() => setWithdrawOpen(true)}>
+              <RowIcon><UserX size={18} /></RowIcon>
+              <RowText>
+                <RowLabel>회원탈퇴</RowLabel>
+                <RowDescription>계정과 모든 기록 삭제</RowDescription>
+              </RowText>
+              <Chevron />
+            </Row>
+          </Group>
+        </Section>
+      )}
+
       <Version>Book Canvas v0.1.0</Version>
+
+      <WithdrawSheet
+        open={withdrawOpen && isLoggedIn}
+        onClose={() => setWithdrawOpen(false)}
+        onWithdrawn={() => {
+          setWithdrawOpen(false);
+          navigate('/profile', { replace: true });
+        }}
+      />
 
       <ChangePasswordSheet
         open={passwordOpen}
         onClose={() => setPasswordOpen(false)}
         onChanged={() => setNotice('비밀번호를 변경했어요. 다음 로그인부터 새 비밀번호를 사용해 주세요.')}
       />
+
+      <BlockedUsersSheet open={blockedOpen && isLoggedIn} onClose={() => setBlockedOpen(false)} />
 
       <ConfirmDialog
         open={logoutOpen}
